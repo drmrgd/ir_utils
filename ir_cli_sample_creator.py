@@ -51,7 +51,6 @@ def get_args():
             help='Tumor type of each sample indicated need to choose from a predefined list. (DEFAULT: "%(default)s")')
     parser.add_argument('-g', '--gender', choices=('Male', 'Female', 'Unknown'), default='Unknown',
             help='Gender of sample. (DEFAULT: "%(default)s)"')
-    # parser.add_argument('-w', '--workflow', metavar='STR workflow code', default='ocp2.0', 
     parser.add_argument('-w', '--workflow', metavar='STR workflow code', 
             help='IR Workflow to run on all samples.  Must use workflow code (run with "?" option to get list of valid codes), and must use the same for all samples (DEFAULT: "%(default)s").')  
     args = parser.parse_args()
