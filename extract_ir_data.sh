@@ -2,7 +2,7 @@
 # Super quickie script to uncompress and unarchive IR data when downloaded directly from the 
 # IR REST API.  Took way longer to finally get around to writing this than it should!
 ##################################################################################################
-VERSION='1.2.0_121515'
+VERSION='1.3.0_030717'
 cwd=$(pwd)
 
 # Check for download_zips dir and make one if need be
@@ -62,6 +62,8 @@ else
 fi
 
 # Copy the VCF files into the new directory
-echo -n "Copying VCF files into 'vcfs' directory..."
+echo -n "Copying VCF files into 'vcfs' directory and trimming name..."
 find . -iname "*vcf" -not -name 'SmallVariants*vcf' -exec cp {} "$cwd/vcfs/" \; > /dev/null 2>&1
+# Fix stupid name from IR5.2
+cd vcfs && rename 's/_Non-Filtered.*/.vcf/' *vcf
 echo "Done!"
