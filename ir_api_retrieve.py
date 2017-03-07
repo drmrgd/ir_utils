@@ -16,8 +16,9 @@ import ssl
 import json
 from pprint import pprint as pp
 
-version = '2.0.0_022317' 
+version = '2.0.1_030717' 
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
+DEBUG = False
 
 
 class Config(object):
@@ -142,7 +143,8 @@ def proc_batchfile(batchfile):
 
 def main():
     cli_args = get_args()
-    pp(cli_args)
+    if DEBUG:
+        pp(cli_args)
     program_config = Config.read_config(config_file)
     
     if cli_args.ip and cli_args.token:
@@ -150,7 +152,8 @@ def main():
         api_token = cli_args.token
     else:
         server_url,api_token = get_host(cli_args.host,program_config['hosts'])
-    print 'host: {}\nip: {}\ntoken: {}'.format(cli_args.host,server_url,api_token)
+    if DEBUG:
+        print 'host: {}\nip: {}\ntoken: {}'.format(cli_args.host,server_url,api_token)
 
     analysis_ids=[]
     if cli_args.batch:
@@ -161,9 +164,10 @@ def main():
         print "ERROR: No analysis ID or batch file loaded!"
         sys.exit(1)
 
-    print('analysis ids:')
-    for s in analysis_ids:
-        print('\t{}'.format(s))
+    if DEBUG:
+        print('analysis ids:')
+        for s in analysis_ids:
+            print('\t{}'.format(s))
 
     api_url = server_url + '/webservices_42/rest/api/analysis?format=json&name='
     httplib.HTTPSConnection.connect=connect
