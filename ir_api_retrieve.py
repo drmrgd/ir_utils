@@ -16,7 +16,7 @@ import ssl
 import json
 from pprint import pprint as pp
 
-version = '2.0.1_030717' 
+version = '2.1.0_031617' 
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 DEBUG = False
 
@@ -51,13 +51,13 @@ def get_args():
         call results from the IR API.  This script also requires an external config file with the API Token in order to access
         the server.
         ''',
-        version = '%(prog)s  - ' + version,
         )
     parser.add_argument('host', nargs='?', metavar='<hostname>', help="Hostname of server from which to gather data. Use '?' to print out all valid hosts.")
     parser.add_argument('analysis_id', nargs='?', help='Analysis ID to retrieve if not using a batchfile')
     parser.add_argument('-b','--batch', metavar='<batch_file>', help='Batch file of experiment names to retrieve')
     parser.add_argument('-i', '--ip', metavar='<ip_address>', help='IP address if not entered into the config file yet.')
     parser.add_argument('-t','--token', metavar='<ir_token>', help='API token if not entered into the config file yet.')
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version)
     cli_args = parser.parse_args()
 
     if not cli_args.host:
@@ -96,7 +96,7 @@ def download_results(server_url,api_token,metadata):
     unfiltered_variants_link = metadata[0]['data_links']['unfiltered_variants']
     expt_name = metadata[0]['name']
 
-    print "Downloading %s.zip..." % expt_name
+    print("Downloading %s.zip..." % expt_name)
     request = urllib2.Request(unfiltered_variants_link,
             headers={'Authorization' : api_token, 'Content-Type' : 'application/x-www-form-urlencoded'}
     )
@@ -104,10 +104,10 @@ def download_results(server_url,api_token,metadata):
         unfiltered_zip = urllib2.urlopen(request)
         with open(expt_name+'_download.zip', 'wb') as zipfile:
             zipfile.write(unfiltered_zip.read())
-    except urllib2.HTTPError, error:
+    except urllib2.HTTPError as error:
         sys.stderr.write('HTTP Error: {}\n'.format(error.read()))
         sys.exit(1)
-    except urllib2.URLError, error:
+    except urllib2.URLError as error:
         sys.stderr.write('URL HTTP Error: {}\n'.format(error.read()))
         sys.exit(1)
     return
@@ -135,7 +135,7 @@ def format_url(ip):
         sys.exit(1)
 
 def jdump(json_data):
-    print json.dumps(json_data, indent=4, sort_keys=True)
+    print(json.dumps(json_data, indent=4, sort_keys=True))
 
 def proc_batchfile(batchfile):
     with open(batchfile) as fh:
@@ -153,7 +153,7 @@ def main():
     else:
         server_url,api_token = get_host(cli_args.host,program_config['hosts'])
     if DEBUG:
-        print 'host: {}\nip: {}\ntoken: {}'.format(cli_args.host,server_url,api_token)
+        print('host: {}\nip: {}\ntoken: {}'.format(cli_args.host,server_url,api_token))
 
     analysis_ids=[]
     if cli_args.batch:
@@ -161,7 +161,7 @@ def main():
     elif cli_args.analysis_id:
         analysis_ids.append(cli_args.analysis_id)
     else:
-        print "ERROR: No analysis ID or batch file loaded!"
+        print("ERROR: No analysis ID or batch file loaded!")
         sys.exit(1)
 
     if DEBUG:
@@ -173,25 +173,26 @@ def main():
     httplib.HTTPSConnection.connect=connect
 
     for expt in analysis_ids:
-        print "Getting metadata for " + expt + "..."
+        print("Getting metadata for " + expt + "...")
         request = urllib2.Request(api_url+expt, 
                 headers={'Authorization' : api_token, 'Content-Type' : 'application/x-www-form-urlencoded'}
         )
         try:
             response = urllib2.urlopen(request)
             metadata = json.loads(response.read())
-        except urllib2.HTTPError, error:
+        except urllib2.HTTPError as error:
             sys.stderr.write('HTTP Error: {}\n'.format(error.read()))
             sys.exit(1)
-        except urllib2.URLError, error:
+        except urllib2.URLError as error:
             sys.stderr.write('URL HTTP Error: {}\n'.format(error.read()))
             sys.exit(1)
 
         if metadata:
+            if DEBUG : jdump(metadata)
             download_results(server_url, api_token, metadata)
-            print "Done!\n"
+            print("Done!\n")
         else:
-            print "ERROR: No analysis data for '{}'. Check the analysis run name.".format(expt)
+            print("ERROR: No analysis data for '{}'. Check the analysis run name.".format(expt))
             sys.exit(1)
 
 if __name__ == '__main__':
