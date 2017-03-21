@@ -1,0 +1,7 @@
+{
+    "name": "ir_api_retrieve.py config file", 
+    "description": "Config file for IR API retrieval script",
+    "version": "0.000000", 
+    "hosts": {
+    } 
+}
