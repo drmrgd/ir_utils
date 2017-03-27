@@ -16,8 +16,9 @@ import ssl
 import json
 from pprint import pprint as pp
 
-version = '2.1.0_031617' 
+version = '2.1.1_032717' 
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
+
 DEBUG = False
 
 
@@ -38,8 +39,12 @@ class Config(object):
     @classmethod
     def read_config(cls,config_file):
         '''Read in a config file of params to use in this program'''
-        with open(config_file) as fh:
-            data = json.load(fh)
+        try:
+            with open(config_file) as fh:
+                data = json.load(fh)
+        except IOError:
+            sys.stderr.write("ERROR: No configuration file found. Do you need to run the config_gen.py script first?\n")
+            sys.exit(1)
         return data
 
 

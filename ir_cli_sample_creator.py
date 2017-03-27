@@ -190,9 +190,6 @@ def create_data_table(bams, cellularity, gender, tumor_type):
     data = defaultdict(dict)
 
     for bam in bams:
-        # fields = bam.split('_')
-        # match = re.search(r'(\w+.*?)-?(DNA|RNA)', fields[0])
-
         match = re.search(r'^(\w+.*?)[-_](DNA|RNA).*', bam)
         try:
             sample = match.group(1)
@@ -217,9 +214,12 @@ def gen_setid():
 
 def read_config(config_file):
     '''Read in a config file of params to use in this program'''
-    print "config file is: {}".format(config_file)
-    with open(config_file) as fh:
-        data = json.load(fh)
+    try:
+        with open(config_file) as fh:
+            data = json.load(fh)
+    except IOError:
+        sys.stderr.write("ERROR: No configuration file found. Do you need to run the config_gen.py script first?")
+        sys.exit(1)
     workflows = data['workflows']
     return workflows
 
