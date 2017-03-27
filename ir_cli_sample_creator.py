@@ -21,7 +21,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint
 
-version = '2.4.0_022317'
+version = '2.4.1_032717'
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_sample_creator_config.json'
 
 def get_args():
@@ -198,7 +198,7 @@ def create_data_table(bams, cellularity, gender, tumor_type):
             sample = match.group(1)
             na_type = match.group(2)
         except:
-            write_msg('err', "sample name '{}' is not well formatted! Can not create a sample.list file from this data. Please use the format 'sample_name-[DR]NA'.".format(fields[0]))
+            write_msg('err', "sample name '{}' is not well formatted! Can not create a sample.list file from this data. Please use the format 'sample_name-[DR]NA'.".format(bam))
             sys.exit(1)
 
         data[sample]['gender']      = gender
