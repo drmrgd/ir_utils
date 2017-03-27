@@ -12,7 +12,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '0.7.0_032117'
+version = '1.0.0_032117'
 
 
 class Config(object):
@@ -39,14 +39,12 @@ class Config(object):
         today = str(datetime.datetime.now().strftime('%m%d%y'))
         return self.config_data.update({'version' : '{}.{}'.format(str(int(v)+1),today)})
 
-    # def add_workflow(self,workflow_id,workflow_name):
     def add_workflow(self,data):
         '''Add workflow shortname and IR matching name to config file.  Requires a dict of workflow data in the form:
                 {<short_name> : <ir_name>}
            Since we're using a dict.update() method, can also use same function for updating the 
            config file.
         '''
-        # return self.config_data['workflows'].update({workflow_id: workflow_name})
         return self.config_data['workflows'].update(data)
 
     def add_host(self,data):
@@ -144,6 +142,8 @@ def get_args():
             print(parser.print_help())
             sys.exit(1)
         host,ip = args.server.split(':')
+        if not ip.startswith('https://'):
+            ip = 'https://' + ip
         new_data[host] = {
             'ip' : ip,
             'token' : args.token
