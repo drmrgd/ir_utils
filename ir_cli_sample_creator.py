@@ -21,7 +21,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint
 
-version = '2.4.1_032717'
+version = '2.5.0_041817'
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_sample_creator_config.json'
 
 def get_args():
@@ -153,6 +153,7 @@ def gen_sample_meta(sample_data, workflow, na_types):
 
 def valid_ir_workflows(workflows,wf_key):
     '''Generate a workflow name to use in sample.meta file.'''
+    single_type_workflows = ('match_dna','pm_blood')
     if not wf_key:
         write_msg('err', "No IR workflow input into script!  You must choose a workflow to run.  Use '-w?' option to see list of valid workflows")
         sys.exit(1)
@@ -162,7 +163,9 @@ def valid_ir_workflows(workflows,wf_key):
         for key in sorted(workflows):
             sys.stdout.write("\t{:12}{}\n".format(key, workflows[key]))
     elif wf_key in workflows:
-        if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and not wf_key == 'match_dna':
+        # TODO: Fix this so that we don't need to hard code! 
+        # if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and not wf_key == 'match_dna':
+        if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and wf_key not in single_type_workflows:
             write_msg('err', 'A DNA or RNA only sample set is being run, but a paired workflow "{}" is selected.  Need to select a DNA or RNA only workflow'.format(wf_key))
             sys.exit(1)
 
