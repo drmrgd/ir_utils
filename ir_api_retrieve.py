@@ -1,19 +1,26 @@
 #!/usr/bin/python
+# Retrieve VCF data from an Ion Reporter Server based on run id.  Requires a config file that 
+# has information about the server from which we'll get data, as well as, the API token used
+# to access the IR API.  
 #
-# Python implementation of the ir_apl_retrieve.pl script that doesn't seem to be working due to
-# some bugs in the LWP modules.  Re-wrote this to accomodate that as well as deal with SSL 
-# issues that seem to be plaguing the perl version of the script across platforms.
+# TODO: Completely re-written for speed!
+#       - Can we add some other method calls to the API now that we have requests generate 
+#         the query for us?
+#       - No longer get all settings and QC metrics, which not often used. maybe this is 
+#         good method for new method calls?
 #
 # 4/1/2015 - D Sims
 ###############################################################################################
 import sys
 import os
 import argparse
-import urllib2
-import httplib
-import socket
-import ssl
+# import urllib2
+# import httplib
+# import socket
+# import ssl
 import json
+import requests
+import zipfile
 from pprint import pprint as pp
 
 version = '2.1.1_032717' 
@@ -62,6 +69,8 @@ def get_args():
     parser.add_argument('-b','--batch', metavar='<batch_file>', help='Batch file of experiment names to retrieve')
     parser.add_argument('-i', '--ip', metavar='<ip_address>', help='IP address if not entered into the config file yet.')
     parser.add_argument('-t','--token', metavar='<ir_token>', help='API token if not entered into the config file yet.')
+    parser.add_argument('-m','--method', metavar='<api_method_call>', 
+            help='Method call / entry point to API. ****  Not yet implemented  ****')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version)
     cli_args = parser.parse_args()
 
@@ -97,6 +106,7 @@ def get_host(hostname,hostdata=None):
     return ip, token
 
 def download_results(server_url,api_token,metadata):
+    '''TODO: Deprecated. To be removed'''
     filtered_variants_link = metadata[0]['data_links']['filtered_variants']
     unfiltered_variants_link = metadata[0]['data_links']['unfiltered_variants']
     expt_name = metadata[0]['name']
@@ -117,16 +127,17 @@ def download_results(server_url,api_token,metadata):
         sys.exit(1)
     return
 
-def connect(self):
-    '''Workaround for SSLv3 issue on these servers. Modify the 'connect' function in httplib in order to
-    handle SSL better from SO #8039859'''
-    sock = socket.create_connection((self.host,self.port),self.timeout,self.source_address)
-    if self._tunnel_host:
-        self.sock = sock
-        self._tunnel()
+# TODO: remove this.
+# def connect(self):
+    # '''Workaround for SSLv3 issue on these servers. Modify the 'connect' function in httplib in order to
+    # handle SSL better from SO #8039859'''
+    # sock = socket.create_connection((self.host,self.port),self.timeout,self.source_address)
+    # if self._tunnel_host:
+        # self.sock = sock
+        # self._tunnel()
 
-    self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version = ssl.PROTOCOL_TLSv1)
-    return
+    # self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version = ssl.PROTOCOL_TLSv1)
+    # return
 
 def format_url(ip):
     pieces = ip.lstrip('https://').split('.')
@@ -146,6 +157,30 @@ def proc_batchfile(batchfile):
     with open(batchfile) as fh:
         return [line.rstrip() for line in fh if line != '\n']
 
+def api_call(url,query,header,name):
+    requests.packages.urllib3.disable_warnings()
+    s = requests.Session()
+    request = s.get(url,headers=header,params=query,verify=False)
+    try:
+        request.raise_for_status()
+    except requests.exceptions.HTTPError as error:
+        sys.stderr.write('{}\n'.format(error))
+        sys.exit(1)
+    json_data = request.json()
+    # jdump(json_data)
+    # sys.exit()
+    data_link = json_data[0]['data_links']
+    if 'unfiltered_variants' in data_link:
+        zip_path = data_link['unfiltered_variants']
+    else:
+        zip_path = data_link
+    zip_name = name + '_download.zip'
+    with open(zip_name, 'wb') as zip_fh:
+        # response = s.get(data_link,headers=header,verify=False)
+        response = s.get(zip_path,headers=header,verify=False)
+        zip_fh.write(response.content)
+    return
+
 def main():
     cli_args = get_args()
     if DEBUG:
@@ -157,6 +192,7 @@ def main():
         api_token = cli_args.token
     else:
         server_url,api_token = get_host(cli_args.host,program_config['hosts'])
+    server_url += '/api/v1/'
     if DEBUG:
         print('host: {}\nip: {}\ntoken: {}'.format(cli_args.host,server_url,api_token))
 
@@ -174,10 +210,16 @@ def main():
         for s in analysis_ids:
             print('\t{}'.format(s))
 
-    api_url = server_url + '/webservices_42/rest/api/analysis?format=json&name='
-    httplib.HTTPSConnection.connect=connect
+    # api_url = server_url + '/webservices_42/rest/api/analysis?format=json&name='
+    # httplib.HTTPSConnection.connect=connect
 
+    new_test = True 
+    # TODO:  Add a nice counter and output here.
     for expt in analysis_ids:
+        if new_test:
+            use_new_method(server_url,expt,api_token)
+            continue
+
         print("Getting metadata for " + expt + "...")
         request = urllib2.Request(api_url+expt, 
                 headers={'Authorization' : api_token, 'Content-Type' : 'application/x-www-form-urlencoded'}
@@ -199,6 +241,16 @@ def main():
         else:
             print("ERROR: No analysis data for '{}'. Check the analysis run name.".format(expt))
             sys.exit(1)
+
+def use_new_method(server_url,expt,api_token,method='getvcf'):
+    '''Quickie wrapper to get new data out as I'm testing a couple methods.  Will merge this wil main()'''
+    sys.stdout.write('Retrieving VCF data for analysis ID: {}...'.format(expt))
+    sys.stdout.flush()
+    header = {'Authorization':api_token,'content-type':'application/x-www-form-urlencoded'}
+    query = {'format':'json','name':expt}
+    url = server_url + method
+    api_call(url,query,header,expt)
+    print('Done!')
 
 if __name__ == '__main__':
     main()
