@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # Retrieve VCF data from an Ion Reporter Server based on run id.  Requires a config file that 
 # has information about the server from which we'll get data, as well as, the API token used
 # to access the IR API.  
@@ -14,19 +14,13 @@
 import sys
 import os
 import argparse
-# import urllib2
-# import httplib
-# import socket
-# import ssl
 import json
 import requests
 import zipfile
 from pprint import pprint as pp
 
-version = '2.1.1_032717' 
+version = '3.0.0_041817' 
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
-
-DEBUG = False
 
 
 class Config(object):
@@ -105,40 +99,6 @@ def get_host(hostname,hostdata=None):
             sys.exit(1)
     return ip, token
 
-def download_results(server_url,api_token,metadata):
-    '''TODO: Deprecated. To be removed'''
-    filtered_variants_link = metadata[0]['data_links']['filtered_variants']
-    unfiltered_variants_link = metadata[0]['data_links']['unfiltered_variants']
-    expt_name = metadata[0]['name']
-
-    print("Downloading %s.zip..." % expt_name)
-    request = urllib2.Request(unfiltered_variants_link,
-            headers={'Authorization' : api_token, 'Content-Type' : 'application/x-www-form-urlencoded'}
-    )
-    try:
-        unfiltered_zip = urllib2.urlopen(request)
-        with open(expt_name+'_download.zip', 'wb') as zipfile:
-            zipfile.write(unfiltered_zip.read())
-    except urllib2.HTTPError as error:
-        sys.stderr.write('HTTP Error: {}\n'.format(error.read()))
-        sys.exit(1)
-    except urllib2.URLError as error:
-        sys.stderr.write('URL HTTP Error: {}\n'.format(error.read()))
-        sys.exit(1)
-    return
-
-# TODO: remove this.
-# def connect(self):
-    # '''Workaround for SSLv3 issue on these servers. Modify the 'connect' function in httplib in order to
-    # handle SSL better from SO #8039859'''
-    # sock = socket.create_connection((self.host,self.port),self.timeout,self.source_address)
-    # if self._tunnel_host:
-        # self.sock = sock
-        # self._tunnel()
-
-    # self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version = ssl.PROTOCOL_TLSv1)
-    # return
-
 def format_url(ip):
     pieces = ip.lstrip('https://').split('.')
     if len(pieces) != 4: 
@@ -166,25 +126,22 @@ def api_call(url,query,header,name):
     except requests.exceptions.HTTPError as error:
         sys.stderr.write('{}\n'.format(error))
         sys.exit(1)
+
     json_data = request.json()
-    # jdump(json_data)
-    # sys.exit()
     data_link = json_data[0]['data_links']
     if 'unfiltered_variants' in data_link:
         zip_path = data_link['unfiltered_variants']
     else:
         zip_path = data_link
+
     zip_name = name + '_download.zip'
     with open(zip_name, 'wb') as zip_fh:
-        # response = s.get(data_link,headers=header,verify=False)
         response = s.get(zip_path,headers=header,verify=False)
         zip_fh.write(response.content)
     return
 
 def main():
     cli_args = get_args()
-    if DEBUG:
-        pp(cli_args)
     program_config = Config.read_config(config_file)
     
     if cli_args.ip and cli_args.token:
@@ -193,8 +150,6 @@ def main():
     else:
         server_url,api_token = get_host(cli_args.host,program_config['hosts'])
     server_url += '/api/v1/'
-    if DEBUG:
-        print('host: {}\nip: {}\ntoken: {}'.format(cli_args.host,server_url,api_token))
 
     analysis_ids=[]
     if cli_args.batch:
@@ -205,52 +160,19 @@ def main():
         print("ERROR: No analysis ID or batch file loaded!")
         sys.exit(1)
 
-    if DEBUG:
-        print('analysis ids:')
-        for s in analysis_ids:
-            print('\t{}'.format(s))
-
-    # api_url = server_url + '/webservices_42/rest/api/analysis?format=json&name='
-    # httplib.HTTPSConnection.connect=connect
-
-    new_test = True 
-    # TODO:  Add a nice counter and output here.
-    for expt in analysis_ids:
-        if new_test:
-            use_new_method(server_url,expt,api_token)
-            continue
-
-        print("Getting metadata for " + expt + "...")
-        request = urllib2.Request(api_url+expt, 
-                headers={'Authorization' : api_token, 'Content-Type' : 'application/x-www-form-urlencoded'}
-        )
-        try:
-            response = urllib2.urlopen(request)
-            metadata = json.loads(response.read())
-        except urllib2.HTTPError as error:
-            sys.stderr.write('HTTP Error: {}\n'.format(error.read()))
-            sys.exit(1)
-        except urllib2.URLError as error:
-            sys.stderr.write('URL HTTP Error: {}\n'.format(error.read()))
-            sys.exit(1)
-
-        if metadata:
-            if DEBUG : jdump(metadata)
-            download_results(server_url, api_token, metadata)
-            print("Done!\n")
-        else:
-            print("ERROR: No analysis data for '{}'. Check the analysis run name.".format(expt))
-            sys.exit(1)
-
-def use_new_method(server_url,expt,api_token,method='getvcf'):
-    '''Quickie wrapper to get new data out as I'm testing a couple methods.  Will merge this wil main()'''
-    sys.stdout.write('Retrieving VCF data for analysis ID: {}...'.format(expt))
-    sys.stdout.flush()
     header = {'Authorization':api_token,'content-type':'application/x-www-form-urlencoded'}
-    query = {'format':'json','name':expt}
+    method='getvcf'
     url = server_url + method
-    api_call(url,query,header,expt)
-    print('Done!')
+
+    sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(cli_args.host,len(analysis_ids)))
+    count = 0
+    for expt in analysis_ids:
+        count += 1
+        sys.stdout.write('  [{}/{}]  Retrieving VCF data for analysis ID: {}...'.format(count,len(analysis_ids),expt))
+        sys.stdout.flush()
+        query = {'format':'json','name':expt}
+        api_call(url,query,header,expt)
+        print('Done!')
 
 if __name__ == '__main__':
     main()
