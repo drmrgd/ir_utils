@@ -17,6 +17,7 @@ import argparse
 import json
 import requests
 import zipfile
+from termcolor import colored,cprint
 from pprint import pprint as pp
 
 version = '3.0.0_041817' 
@@ -124,8 +125,9 @@ def api_call(url,query,header,name):
     try:
         request.raise_for_status()
     except requests.exceptions.HTTPError as error:
-        sys.stderr.write('{}\n'.format(error))
-        sys.exit(1)
+        cprint('\n\n\t{}'.format(error), 'red', attrs=['bold'], file=sys.stderr)
+        cprint('\tSkipping analysis id: {}. Check ID for this run and try again.\n'.format(query['name']), 'red', attrs=['bold'], file=sys.stderr)
+        return None
 
     json_data = request.json()
     data_link = json_data[0]['data_links']
@@ -138,6 +140,7 @@ def api_call(url,query,header,name):
     with open(zip_name, 'wb') as zip_fh:
         response = s.get(zip_path,headers=header,verify=False)
         zip_fh.write(response.content)
+    print('Done!')
     return
 
 def main():
@@ -172,7 +175,9 @@ def main():
         sys.stdout.flush()
         query = {'format':'json','name':expt}
         api_call(url,query,header,expt)
-        print('Done!')
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(1)
