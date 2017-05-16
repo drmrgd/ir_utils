@@ -92,12 +92,21 @@ def get_args():
     parser.add_argument('--new', choices=('api','sample'),
             help='Make a new config.json from template. Must choose type to make from list.')
     parser.add_argument('--update', metavar='<JSON file>', help='Update key / value pair as a comma delimited list (e.g. key,"name of value to update".')
+    
     parser.add_argument('--server', metavar='hostname:IP_address', 
             help='Hostname and IP address, delimited by a colon, for new server to add to the api_retrieve config.')
     parser.add_argument('--token', metavar='<api_token>', 
             help='API Token used for IR API Retrieve.  Must be input for new IR connections.')
+
     parser.add_argument('--workflow', metavar='short_name:IR_workflow_name', 
             help='Short name and IR workflow name (quote names with spaces in them), delimited by a colon, to be added to the sample_creator config file.')
+    parser.add_argument('-type', choice=['single','paired'],
+            help='Used with workflow config file. Indicate if the workflow is for a paired DNA / RNA or a single RNA / single DNA specimen.')
+
+    # TODO: Add a read from flat file option?
+    parser.add_argument('--file', metavar='<file>', 
+            help='Read config data from a flat CSV file rather than inputting each element on the commandline.  Helpful for instances where we need to add a lot of stuff to one config.')
+
     parser.add_argument('--version', action='version', version = '%(prog)s ' + version)
     args = parser.parse_args()
 
