@@ -163,9 +163,8 @@ def valid_ir_workflows(workflows,wf_key):
         for key in sorted(workflows):
             sys.stdout.write("\t{:12}{}\n".format(key, workflows[key]))
     elif wf_key in workflows:
-        # TODO: Fix this so that we don't need to hard code! 
         # if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and not wf_key == 'match_dna':
-        if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and wf_key not in single_type_workflows:
+        if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and not wf_key in ['match_dna','pm_blood']:
             write_msg('err', 'A DNA or RNA only sample set is being run, but a paired workflow "{}" is selected.  Need to select a DNA or RNA only workflow'.format(wf_key))
             sys.exit(1)
 
