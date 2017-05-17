@@ -1,7 +1,11 @@
-{ 
-    "name" : "ir_cli_sample_creator.py config file",
-    "version" : "0.000000",
-    "description" : "Config file for the IR CLI Sample Creator script to simply new workflow input and management",
-    "workflows" : {
-    }
+{
+    "workflows": {
+        "paired": {
+        }, 
+        "single": {
+        }
+    }, 
+    "version": "1.051717", 
+    "name": "ir_cli_sample_creator.py config file", 
+    "description": "Config file for the IR CLI Sample Creator script to simply new workflow input and management"
 }
