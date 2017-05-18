@@ -6,8 +6,6 @@
 #      not the same, it's tough to figure out how to pair them correctly.  So we have to gen
 #      the files and then manually edit them! 
 #
-#    - Need to strip DNA or RNA from the analysis ID string that is being generated. 
-#
 # 12/9/2015 - D Sims
 ###############################################################################################
 import sys
@@ -21,7 +19,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '2.8.0_051817'
+version = '2.9.0_051817'
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_sample_creator_config.json'
 
 class Config(object):
@@ -128,12 +126,16 @@ def get_args():
     workflows = Config(config_file)
     ir_workflow = workflows.get_workflow(args.workflow,analysis_type)
 
-    if len(args.bams) < 2 and analysis_type == 'paired':
+    if len(args.bams) < 1:
         write_msg('err', "You must input at least 1 DNA and 1 RNA BAM file to run this script!")
         sys.exit(1)
-    elif len(args.bams) < 1 and analysis_type == 'single':
-        write_msg('err', "You must input at least 1 DNA or 1 RNA BAM file to run this script!")
-        sys.exit(1)
+
+    # if len(args.bams) < 2 and analysis_type == 'paired':
+        # write_msg('err', "You must input at least 1 DNA and 1 RNA BAM file to run this script!")
+        # sys.exit(1)
+    # elif len(args.bams) < 1 and analysis_type == 'single':
+        # write_msg('err', "You must input at least 1 DNA or 1 RNA BAM file to run this script!")
+        # sys.exit(1)
 
     return args,analysis_type,ir_workflow
 
@@ -218,13 +220,19 @@ def gen_sample_meta(sample_data, workflow, na_types):
     sys.stdout.write("Done!\n")
     return
 
-def validate_samples(sample_data,analysis_type):
+def validate_samples(sample_data,na_type):
     '''If sample doesn't have both RNA and DNA component, skip it until we have a better way to deal with these'''
     valid_samples = {}
     for sample in sample_data:
         # should have 5 keys if both DNA and RNA present; else will be 4 keys.  Shorter than a complex boolean check here I think.
-        if len(sample_data[sample]) < 5 and analysis_type is not 'single':
-            write_msg('warn', "'{}' only has one component and can not be paired. Need to manually import this sample. Skipping!".format(sample))
+        if len(sample_data[sample]) < 5 and len(na_type) == 2:
+            write_msg('warn', "'{}' only has one component but a paired workflow was chosen. Need to manually import this sample. Skipping!".format(sample))
+            continue
+        elif na_type[0] == 'DNA' and 'DNA' not in sample_data[sample]:
+            write_msg('warn', "'{}' is a DNA sample, but we require an RNA for this workflow! Skipping this sample.".format(sample))
+            continue
+        elif na_type[0] == 'RNA' and 'RNA' not in sample_data[sample]:
+            write_msg('warn', "'{}' is a RNA sample, but we require an DNA for this workflow! Skipping this sample.".format(sample))
             continue
         else:
             valid_samples[sample] = sample_data[sample]
@@ -261,17 +269,18 @@ def gen_setid():
 def main():
     args,analysis_type,ir_workflow = get_args()
     bams = args.bams
-    sample_table = create_data_table(bams, args.cellularity, args.gender, args.tumor_type)
-    sample_data = validate_samples(sample_table,analysis_type)
 
-    # Get sample relationship information (DNA / RNA / DNA-RNA) here and load it into func
-    rel_workflow = []
     if args.dna_only:
-        rel_workflow.append('DNA')
+        rel_workflow = ['DNA']
     elif args.rna_only:
-        rel_workflow.append('RNA')
-    else:
-        rel_workflow.extend(['DNA','RNA'])
+        rel_workflow = ['RNA']
+    else: rel_workflow = ['DNA','RNA']
+
+    sample_table = create_data_table(bams, args.cellularity, args.gender, args.tumor_type)
+    sample_data = validate_samples(sample_table,rel_workflow)
+
+    pp(sample_data)
+    sys.exit()
 
     # Generate the 'sample.list' file
     gen_sample_list(sample_data,rel_workflow)
