@@ -12,8 +12,8 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '1.5.0_051817'
-
+version = '1.6.0_051817'
+debug = False
 
 class Config(object):
     def __init__(self,config_file):
@@ -45,6 +45,8 @@ class Config(object):
            Since we're using a dict.update() method, can also use same function for updating the 
            config file.
         '''
+        for k in data:
+            self.config_data['workflows'][k].update(data[k])
         return self.config_data['workflows'].update(data)
 
     def add_host(self,data):
@@ -159,7 +161,6 @@ def get_args():
 
     return args.method, json_template, new_data, args.update
 
-
 def validate_file(flatfile,method):
     with open(flatfile) as fh:
         for line_num, line in enumerate(fh):
@@ -210,7 +211,6 @@ def backup_config(jfile):
 
 def main():
     method,source_json_file,new_data,update = get_args()
-    debug = True
     if debug:
         print('{}  DEBUG  {}'.format('-'*30, '-'*30))
         print('method: {}\nsource_json_file: {}\nupdate: {}'.format(method, source_json_file, update))
