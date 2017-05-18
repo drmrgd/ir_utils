@@ -12,7 +12,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '1.3.0_051717'
+version = '1.5.0_051817'
 
 
 class Config(object):
@@ -81,7 +81,6 @@ class Config(object):
 
 def get_args():
     parser = argparse.ArgumentParser(
-        # formatter_class = lambda prog: argparse.HelpFormatter(prog, max_help_position = 100, width=125),
         formatter_class = lambda prog: argparse.HelpFormatter(prog, width=125),
         description='''
         Configuration file generation utility for ir_utils.  Needed to make a IR API Retrieve and IR CLI Sample Creator
@@ -118,10 +117,11 @@ def get_args():
 
     new_data = defaultdict(dict)
 
-    # Get and check the passed args.
+    # Get and check the passed args to set up data struct for updating the file.
     if args.file:
         '''process the file accordingly'''
         print('Getting params from a flat file: %s' % (args.file))
+        validate_file(args.file,args.method)
         new_data = read_flat_file(args.file,args.method)
     else:
         if args.method == 'sample':
@@ -157,30 +157,21 @@ def get_args():
     elif args.method == 'sample':
         json_template = 'templates/ir_sample_creator_config.tmplt'
 
-    type_flag = os.path.basename(json_template).split('_')[1]
-    if type_flag == 'api' and args.workflow:
-        write_msg('err','Mismatch between args (--workflow) and config type (--api)!\n\n')
-        parser.print_help()
-        sys.exit(1)
-    elif type_flag == 'sample' and args.server:
-        write_msg('err','Mismatch between args (--server) and config type (--sample)!\n\n')
-        parser.print_help()
-        sys.exit(1)
-    
-    # Set up dict of new data to process
-    # if args.method == 'api':
-        # host,ip = args.server.split(':')
-        # if not ip.startswith('https://'):
-            # ip = 'https://' + ip
-        # new_data[host] = {
-            # 'ip' : ip,
-            # 'token' : args.token
-        # }
-    # elif args.method == 'sample':
-        # short_name,workflow = args.workflow.split(':')
-        # new_data[args.analysis_type][short_name] = workflow
     return args.method, json_template, new_data, args.update
 
+
+def validate_file(flatfile,method):
+    with open(flatfile) as fh:
+        for line_num, line in enumerate(fh):
+            terminal_string = line.rstrip('\n').split(',')[1]
+            if method == 'sample' and terminal_string not in ('single','paired'):
+                sys.stderr.write('ERROR: Invalid string "{}" in following line of input file (expected only "single" or "paired"):\n'.format(terminal_string))
+                sys.stderr.write('{}: {}\n'.format(line_num,line))
+                sys.exit(1)
+            elif method == 'api' and terminal_string in ('single', 'paired'):
+                sys.stderr.write('ERROR: Invalid string "{}" in following line of input file (expected an API token):\n'.format(terminal_string))
+                sys.stderr.write('{}: {}\n'.format(line_num,line))
+                sys.exit(1)
 
 def read_flat_file(f,method):
     parsed_data = defaultdict(dict)
@@ -192,8 +183,7 @@ def read_flat_file(f,method):
                 parsed_data[elems[1]].update({sname:lname})
             elif method == 'api':
                 host,ip = elems[0].split(':')
-                parsed_data['workflows'] = ''
-                # TODO: fix this.
+                parsed_data[host].update({"ip": ip, "token":elems[1]})
 
     pp(dict(parsed_data))
     sys.exit()
