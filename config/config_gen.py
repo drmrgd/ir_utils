@@ -153,8 +153,9 @@ def get_args():
                 sys.exit(1)
             else:
                 host,ip = args.server.split(':')
-                if not ip.startswith('https://'):
-                    ip = 'https://' + ip
+                ip = 'https://' + ip.lstrip('https://')
+                # if not ip.startswith('https://'):
+                    # ip = 'https://' + ip
                 new_data[host] = {
                     'ip' : ip,
                     'token' : args.token
