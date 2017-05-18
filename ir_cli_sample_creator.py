@@ -80,6 +80,7 @@ class Config(object):
             sys.exit(1)
         return data['workflows']
 
+
 def get_args():
     parser = argparse.ArgumentParser(
         formatter_class = lambda prog: argparse.HelpFormatter(prog, max_help_position = 100, width=200),
@@ -117,10 +118,8 @@ def get_args():
 
     # Validate selected workflow
     if args.dna_only or args.rna_only:
-        print('this is a single run')
         analysis_type = 'single'
     else:
-        print('this is a paired run')
         analysis_type = 'paired'
 
     workflows = Config(config_file)
@@ -129,14 +128,6 @@ def get_args():
     if len(args.bams) < 1:
         write_msg('err', "You must input at least 1 DNA and 1 RNA BAM file to run this script!")
         sys.exit(1)
-
-    # if len(args.bams) < 2 and analysis_type == 'paired':
-        # write_msg('err', "You must input at least 1 DNA and 1 RNA BAM file to run this script!")
-        # sys.exit(1)
-    # elif len(args.bams) < 1 and analysis_type == 'single':
-        # write_msg('err', "You must input at least 1 DNA or 1 RNA BAM file to run this script!")
-        # sys.exit(1)
-
     return args,analysis_type,ir_workflow
 
 def write_msg(flag, string):
@@ -278,9 +269,6 @@ def main():
 
     sample_table = create_data_table(bams, args.cellularity, args.gender, args.tumor_type)
     sample_data = validate_samples(sample_table,rel_workflow)
-
-    pp(sample_data)
-    sys.exit()
 
     # Generate the 'sample.list' file
     gen_sample_list(sample_data,rel_workflow)
