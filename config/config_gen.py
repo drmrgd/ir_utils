@@ -92,7 +92,7 @@ def get_args():
     )
     parser.add_argument('-m', '--method', choices=('api','sample'), required=True,
             help='Type of config file to be made or updated.')
-    parser.add_argument('-u', '--update', metavar='<JSON file>', 
+    parser.add_argument('-u', '--update', action='store_true',
             help='''Update a config file with new data. Must use either the "server" and "token" options for an 
                     API config, or the 'workflow' and 'analysis_type' options for a sample uploader config''')
     
@@ -108,32 +108,50 @@ def get_args():
     parser.add_argument('-a', '--analysis_type', choices=('single','paired'),
             help='Indicate if the workflow is for a paired DNA / RNA or a single RNA / single DNA specimen.')
 
-    # TODO: Add a read from flat file option?
     parser.add_argument('-f', '--file', metavar='<file>', 
-            help='Read config data from a flat CSV file rather than inputting each element on the commandline.  Helpful for instances where we need to add a lot of stuff to one config.')
+            help='''Read config data from a flat CSV file rather than inputting each element on the commandline. Each line of the file should
+                    be formatted similarly to the way data would normally be entered (e.g short_name:IR_name,single or host:ip,token). This 
+                    method will be helpful for instances where we need to add a lot of stuff to one config.''')
 
     parser.add_argument('--version', action='version', version = '%(prog)s ' + version)
     args = parser.parse_args()
+
+    new_data = defaultdict(dict)
 
     # Get and check the passed args.
     if args.file:
         '''process the file accordingly'''
         print('Getting params from a flat file: %s' % (args.file))
-        print('this is not yet implemented, so skipping!')
-        sys.exit(213)
+        new_data = read_flat_file(args.file,args.method)
     else:
-        if args.method == 'sample' and not all((args.workflow,args.analysis_type)):
+        if args.method == 'sample':
+            if not all((args.workflow,args.analysis_type)):
                 write_msg('err','Missing data! You must indicate the workflow name and if the new workflow is a "paired" or "single" workflow when using the "sample" method!\n\n')
                 parser.print_help()
                 sys.exit(1)
-        elif args.method == 'api' and not all((args.server,args.token)):
+            else:
+                short_name,workflow = args.workflow.split(':')
+                new_data[args.analysis_type][short_name] = workflow
+        elif args.method == 'api':
+            if not all((args.server,args.token)):
                 write_msg('err','Missing data! You must indicate the server name and input an API token when using the API method.\n\n')
                 parser.print_help()
                 sys.exit(1)
+            else:
+                host,ip = args.server.split(':')
+                if not ip.startswith('https://'):
+                    ip = 'https://' + ip
+                new_data[host] = {
+                    'ip' : ip,
+                    'token' : args.token
+                }
 
     # Choose which template we're working with and check to be sure it's the right one
     if args.update:
-        json_template = args.update
+        if args.method == 'api':
+            json_template = 'ir_api_retrieve_config.json'
+        else:
+            json_template = 'ir_sample_creator_config.json'
     elif args.method == 'api':
         json_template = 'templates/ir_api_retrieve_config.tmplt'
     elif args.method == 'sample':
@@ -150,20 +168,36 @@ def get_args():
         sys.exit(1)
     
     # Set up dict of new data to process
-    new_data = defaultdict(dict)
-    if args.method == 'api':
-        host,ip = args.server.split(':')
-        if not ip.startswith('https://'):
-            ip = 'https://' + ip
-        new_data[host] = {
-            'ip' : ip,
-            'token' : args.token
-        }
-    elif args.method == 'sample':
-        short_name,workflow = args.workflow.split(':')
-        new_data[args.analysis_type][short_name] = workflow
+    # if args.method == 'api':
+        # host,ip = args.server.split(':')
+        # if not ip.startswith('https://'):
+            # ip = 'https://' + ip
+        # new_data[host] = {
+            # 'ip' : ip,
+            # 'token' : args.token
+        # }
+    # elif args.method == 'sample':
+        # short_name,workflow = args.workflow.split(':')
+        # new_data[args.analysis_type][short_name] = workflow
     return args.method, json_template, new_data, args.update
 
+
+def read_flat_file(f,method):
+    parsed_data = defaultdict(dict)
+    with open(f) as fh:
+        for line in fh:
+            elems = line.rstrip('\n').split(',')
+            if method == 'sample':
+                sname, lname = elems[0].split(':')
+                parsed_data[elems[1]].update({sname:lname})
+            elif method == 'api':
+                host,ip = elems[0].split(':')
+                parsed_data['workflows'] = ''
+                # TODO: fix this.
+
+    pp(dict(parsed_data))
+    sys.exit()
+    return
 
 def write_msg(flag, string):
     if flag == 'err':
