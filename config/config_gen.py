@@ -12,7 +12,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '1.7.0_051817'
+version = '1.8.0_051817'
 debug = False
 
 class Config(object):
@@ -196,6 +196,7 @@ def read_flat_file(f,method):
                 parsed_data[elems[1]].update({sname:lname})
             elif method == 'api':
                 host,ip = elems[0].split(':')
+                ip = 'https://' + ip.lstrip('https://')
                 parsed_data[host].update({"ip": ip, "token":elems[1]})
     return parsed_data
 
