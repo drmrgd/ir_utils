@@ -19,17 +19,75 @@ import json
 import random
 from collections import defaultdict
 from termcolor import colored,cprint
-from pprint import pprint
+from pprint import pprint as pp
 
-version = '2.5.0_041817'
+version = '2.8.0_051817'
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_sample_creator_config.json'
+
+class Config(object):
+    def __init__(self,config_file):
+        self.workflow_data = self.read_config(config_file)
+
+    def __repr__(self):
+        return '%s;%s' % (self.__class__,self.__dict__)
+
+    def __getitem__(self,key):
+        return self.workflow_data['workflows'][key]
+
+    def __iter__(self,d):
+        return self.workflow_data.itervalues()
+
+    def get_workflow(self,name,atype=None):
+        '''Return a workflow name from the config JSON file to use in sample.meta file.'''
+        if name == '?':
+            self.__print_workflows()
+            sys.exit()
+
+        # Validate the analysis type
+        try:
+            workflow = self.workflow_data[atype][name]
+            sys.stdout.write("Using workflow '{}'.\n".format(workflow))
+        except KeyError:
+            # sys.stderr.write("ERROR: {} is not a valid workflow short name!\n".format(name))
+            if atype == 'single' and name in self.workflow_data['paired']:
+                write_msg('err', "Workflow '{}' is a paired DNA + RNA workflow, but a 'single' analysis type was chosen.".format(name))
+            elif atype == 'paired' and name in self.workflow_data['single']:
+                write_msg('err', "Workflow '{}' is a single DNA or RNA workflow, but a 'paired' analysis type was chosen.".format(name))
+            else:
+                write_msg("err",'{} is not a valid workflow short name!'.format(name))
+            self.__print_workflows()
+            sys.exit(1)
+        return workflow
+
+    def __validate_type(self,atype):
+        if atype not in self.workflow_data.keys():
+            write_msg('err', 'You have chosen a {} analysis type, but workflow {} is not designed for that type of analysis!'.format(atype,'foo'))
+            sys.exit()
+
+    def __print_workflows(self):
+        for atype in sorted(self.workflow_data):
+            sys.stdout.write('%s:\n' % atype)
+            for short_name in self.workflow_data[atype]:
+                sys.stdout.write("\t{:12}{}\n".format(short_name, self.workflow_data[atype][short_name]))
+
+    def read_config(self,config_file):
+        try:
+            with open(config_file) as fh:
+                data = json.load(fh)
+        except IOError:
+            write_msg('err', 'No configuration file found. Do you need to fun the config_gen.py script first?')
+            sys.exit(1)
+        except ValueError as e:
+            sys.stderr.write('ERROR: There is a formatting problem with the JSON config file {}: \n{}'.format(config_file,e))
+            sys.exit(1)
+        return data['workflows']
 
 def get_args():
     parser = argparse.ArgumentParser(
         formatter_class = lambda prog: argparse.HelpFormatter(prog, max_help_position = 100, width=200),
         description='''
         Generate a 'sample.list' and 'sample.meta' fileset for a group of BAMs to put into IR and process.
-        The filenames should be underscore delimited to indicate:
+        The filenames must be underscore delimited to indicate:
         
                     <sample-(DNA|RNA)>_barcode_runid_ect.bam
 
@@ -41,7 +99,7 @@ def get_args():
         Value, Cancer Type, etc.  Eventually we can try to customize this with an input list.
         ''',
         version = '%(prog)s  - ' + version,
-        )
+    )
     parser.add_argument('bams', nargs='*', metavar='<bamfiles>', help='List of bamfiles to process')
     parser.add_argument('-d', '--dna_only', action='store_true', help='Samples are DNA only and a DNA only workflow is to be run')
     parser.add_argument('-r', '--rna_only', action='store_true', help='Samples are RNA only and a RNA only workflow is to be run (NOT YET IMPLEMENTED!)')
@@ -55,20 +113,29 @@ def get_args():
             help='IR Workflow to run on all samples.  Must use workflow code (run with "?" option to get list of valid codes), and must use the same for all samples (DEFAULT: "%(default)s").')  
     args = parser.parse_args()
 
-    # Set the workflow type globally here so that we can access later in other functions.
-    global DNA_ONLY_WORKFLOW 
-    DNA_ONLY_WORKFLOW = args.dna_only 
-    global RNA_ONLY_WORKFLOW 
-    RNA_ONLY_WORKFLOW = args.rna_only
-    
-    # Validate selected workflow
-    workflows = read_config(config_file)
-    ir_workflow = valid_ir_workflows(workflows,args.workflow)
-
-    if len(args.bams) < 2:
-        write_msg('err', "You must input at least 1 DNA and 1 RNA BAM file to process!")
+    if not args.workflow:
+        write_msg('err', "No IR workflow input into script!  You must choose a workflow to run.  Use '-w?' option to see list of valid workflows")
         sys.exit(1)
-    return args,ir_workflow
+
+    # Validate selected workflow
+    if args.dna_only or args.rna_only:
+        print('this is a single run')
+        analysis_type = 'single'
+    else:
+        print('this is a paired run')
+        analysis_type = 'paired'
+
+    workflows = Config(config_file)
+    ir_workflow = workflows.get_workflow(args.workflow,analysis_type)
+
+    if len(args.bams) < 2 and analysis_type == 'paired':
+        write_msg('err', "You must input at least 1 DNA and 1 RNA BAM file to run this script!")
+        sys.exit(1)
+    elif len(args.bams) < 1 and analysis_type == 'single':
+        write_msg('err', "You must input at least 1 DNA or 1 RNA BAM file to run this script!")
+        sys.exit(1)
+
+    return args,analysis_type,ir_workflow
 
 def write_msg(flag, string):
     if flag == 'err':
@@ -151,41 +218,19 @@ def gen_sample_meta(sample_data, workflow, na_types):
     sys.stdout.write("Done!\n")
     return
 
-def valid_ir_workflows(workflows,wf_key):
-    '''Generate a workflow name to use in sample.meta file.'''
-    single_type_workflows = ('match_dna','pm_blood')
-    if not wf_key:
-        write_msg('err', "No IR workflow input into script!  You must choose a workflow to run.  Use '-w?' option to see list of valid workflows")
-        sys.exit(1)
-
-    if wf_key == '?':
-        sys.stdout.write("All valid workflows:\n")
-        for key in sorted(workflows):
-            sys.stdout.write("\t{:12}{}\n".format(key, workflows[key]))
-    elif wf_key in workflows:
-        # if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and not wf_key == 'match_dna':
-        if (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW) and not wf_key in ['match_dna','pm_blood']:
-            write_msg('err', 'A DNA or RNA only sample set is being run, but a paired workflow "{}" is selected.  Need to select a DNA or RNA only workflow'.format(wf_key))
-            sys.exit(1)
-
-        sys.stdout.write("Using workflow '{}'.\n".format(workflows[wf_key]))
-        return workflows[wf_key]
-    else:
-        write_msg('err', "'{}' is not a valid workflow!\n".format(wf_key))
-        valid_ir_workflows('?')
-    sys.exit(0)
-    return
-
-def validate_samples(sample_data):
+def validate_samples(sample_data,analysis_type):
     '''If sample doesn't have both RNA and DNA component, skip it until we have a better way to deal with these'''
     valid_samples = {}
     for sample in sample_data:
         # should have 5 keys if both DNA and RNA present; else will be 4 keys.  Shorter than a complex boolean check here I think.
-        if len(sample_data[sample]) < 5 and not (DNA_ONLY_WORKFLOW or RNA_ONLY_WORKFLOW):
+        if len(sample_data[sample]) < 5 and analysis_type is not 'single':
             write_msg('warn', "'{}' only has one component and can not be paired. Need to manually import this sample. Skipping!".format(sample))
             continue
         else:
             valid_samples[sample] = sample_data[sample]
+    if len(valid_samples) < 1:
+        write_msg('err', 'There are no valid samples to process!\n')
+        sys.exit(1)
     return valid_samples
 
 def create_data_table(bams, cellularity, gender, tumor_type):
@@ -208,33 +253,22 @@ def create_data_table(bams, cellularity, gender, tumor_type):
             data[sample]['DNA'] = os.path.abspath(bam)
         else:
             data[sample]['RNA'] = os.path.abspath(bam)
-    data = validate_samples(data)
     return data
 
 def gen_setid():
     return ''.join([random.choice('0123456789abcdef') for x in range(6)])
 
-def read_config(config_file):
-    '''Read in a config file of params to use in this program'''
-    try:
-        with open(config_file) as fh:
-            data = json.load(fh)
-    except IOError:
-        sys.stderr.write("ERROR: No configuration file found. Do you need to run the config_gen.py script first?")
-        sys.exit(1)
-    workflows = data['workflows']
-    return workflows
-
 def main():
-    cli_opts, ir_workflow = get_args()
-    bams = cli_opts.bams
-    sample_data = create_data_table(bams, cli_opts.cellularity, cli_opts.gender, cli_opts.tumor_type)
+    args,analysis_type,ir_workflow = get_args()
+    bams = args.bams
+    sample_table = create_data_table(bams, args.cellularity, args.gender, args.tumor_type)
+    sample_data = validate_samples(sample_table,analysis_type)
 
     # Get sample relationship information (DNA / RNA / DNA-RNA) here and load it into func
     rel_workflow = []
-    if DNA_ONLY_WORKFLOW:
+    if args.dna_only:
         rel_workflow.append('DNA')
-    elif RNA_ONLY_WORKFLOW:
+    elif args.rna_only:
         rel_workflow.append('RNA')
     else:
         rel_workflow.extend(['DNA','RNA'])
