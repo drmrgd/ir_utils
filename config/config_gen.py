@@ -12,7 +12,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '1.6.0_051817'
+version = '1.7.0_051817'
 debug = False
 
 class Config(object):
@@ -39,6 +39,18 @@ class Config(object):
         today = str(datetime.datetime.now().strftime('%m%d%y'))
         return self.config_data.update({'version' : '{}.{}'.format(str(int(v)+1),today)})
 
+    def rm_workflow(self,data,key):
+        '''TODO:
+        add capability to remove workflows that we don't wnat to have any more.
+        '''
+        return
+
+    def rm_host(self,data,host):
+        '''TODO:
+        add capbility to remove servers that we don't have to access any more.
+        '''
+        return
+
     def add_workflow(self,data):
         '''Add workflow shortname and IR matching name to config file.  Requires a dict of workflow data in the form:
                 {<single|paired> : {<short_name> : <ir_name>}}
@@ -47,7 +59,7 @@ class Config(object):
         '''
         for k in data:
             self.config_data['workflows'][k].update(data[k])
-        return self.config_data['workflows'].update(data)
+        return self.config_data
 
     def add_host(self,data):
         '''Add host, ip, and token to config file.  Requires a dict of host data in the form:
@@ -66,7 +78,7 @@ class Config(object):
         else: 
             json_out = self.config_file
         with open(json_out, 'w') as out_fh:
-            json.dump(self.config_data,out_fh,indent=4,sort_keys=False)
+            json.dump(self.config_data,out_fh,indent=4,sort_keys=True)
 
     def __make_blank_template(self,method):
         '''Make a brand new shiny template file to use for something else. Not yet needed, but can
