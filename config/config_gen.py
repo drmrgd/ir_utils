@@ -184,10 +184,7 @@ def read_flat_file(f,method):
             elif method == 'api':
                 host,ip = elems[0].split(':')
                 parsed_data[host].update({"ip": ip, "token":elems[1]})
-
-    pp(dict(parsed_data))
-    sys.exit()
-    return
+    return parsed_data
 
 def write_msg(flag, string):
     if flag == 'err':
