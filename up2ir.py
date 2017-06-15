@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-# Try to generate a wrapper script for irucli so that we can do this a little easier. 
+#!/usr/bin/env python
+# Quickie wrapper script for irucli so that we can do this a little easier. 
 # 
 # 4/17/2017 - D Sims
 ##################################################################################################################
@@ -7,8 +7,10 @@ import sys
 import os
 import subprocess
 from getpass import getpass
+from pprint import pprint as pp
 
-version='1.0.041717'
+version='1.0.061517'
+
 irucli_path = os.environ['HOME'] + '/Dropbox/ir_stuff/IonReporterUploader-cli_5.2.0.66'
 
 def get_config(site):
@@ -63,6 +65,17 @@ if __name__=='__main__':
         if not os.path.exists(config):
             sys.stderr.write("ERROR: Can not find config file: {}\n".format(config))
             sys.exit(1)
+
+    dirlist = os.listdir(os.getcwd())
+
+    # Check to make sure there is a sample.list file for sample manifest and location, a sample.meta file for 
+    # analysis options, and a set of BAM files (of course!) before we get started.
+    if not all(x in dirlist for x in ('sample.list', 'sample.meta')):
+        sys.stderr.write('ERROR: You must include a "sample.list" and "sample.meta" file for this script!\n')
+        sys.exit(1)
+    elif not any('bam' in x for x in dirlist):
+        sys.stderr.write('ERROR: there are no BAM files in this directory to upload to IR!\n')
+        sys.exit(1)
 
     password = getpass('Enter password for {}: '.format(site))
     upload_to_ir(config,password)
