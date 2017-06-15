@@ -106,25 +106,27 @@ def get_args():
     parser.add_argument('-m', '--method', choices=('api','sample'), required=True,
             help='Type of config file to be made or updated.')
     parser.add_argument('-u', '--update', action='store_true',
-            help='''Update a config file with new data. Must use either the "server" and "token" options for an 
-                    API config, or the 'workflow' and 'analysis_type' options for a sample uploader config''')
+            help='Update a config file with new data. Must use either the "server" and "token" options for an '
+                 'API config, or the "workflow" and "analysis_type" options for a sample uploader config')
     
     parser.add_argument('-s', '--server', metavar='<hostname:IP_address>', 
             help='Hostname and IP address, delimited by a colon, for new server to add to the api_retrieve config.')
     parser.add_argument('-t', '--token', metavar='<api_token>', 
-            help='API Token used for IR API Retrieve. This can be determined from a user account on the IR server to be added..')
+            help='API Token used for IR API Retrieve. This can be determined from a user account on the IR server '
+                 'to be added..')
 
     parser.add_argument('-w', '--workflow', metavar='short_name:IR_workflow_name', 
-            help='''Short name and IR workflow name (quote names with spaces in them), delimited by a colon, to be added 
-                    to the sample_creator config file. The full workflow name must match exactly the name that's indicated
-                    in the IR GUI.''')
+            help='Short name and IR workflow name (quote names with spaces in them), delimited by a colon, to be '
+                 'added to the sample_creator config file. The full workflow name must match exactly the name that '
+                 'is indicated in the IR GUI.')
     parser.add_argument('-a', '--analysis_type', choices=('single','paired'),
             help='Indicate if the workflow is for a paired DNA / RNA or a single RNA / single DNA specimen.')
 
     parser.add_argument('-f', '--file', metavar='<file>', 
-            help='''Read config data from a flat CSV file rather than inputting each element on the commandline. Each line of the file should
-                    be formatted similarly to the way data would normally be entered (e.g short_name:IR_name,single or host:ip,token). This 
-                    method will be helpful for instances where we need to add a lot of stuff to one config.''')
+            help='Read config data from a flat CSV file rather than inputting each element on the commandline. '
+                 'Each line of the file should be formatted similarly to the way data would normally be entered '
+                 '(e.g short_name:IR_name,single or host:ip,token). This method will be helpful for instances '
+                 'where we need to add a lot of stuff to one config.')
 
     parser.add_argument('--version', action='version', version = '%(prog)s ' + version)
     args = parser.parse_args()
@@ -133,14 +135,14 @@ def get_args():
 
     # Get and check the passed args to set up data struct for updating the file.
     if args.file:
-        '''process the file accordingly'''
         print('Getting params from a flat file: %s' % (args.file))
         validate_file(args.file,args.method)
         new_data = read_flat_file(args.file,args.method)
     else:
         if args.method == 'sample':
             if not all((args.workflow,args.analysis_type)):
-                write_msg('err','Missing data! You must indicate the workflow name and if the new workflow is a "paired" or "single" workflow when using the "sample" method!\n\n')
+                write_msg('err','Missing data! You must indicate the workflow name and if the new workflow is a '
+                          '"paired" or "single" workflow when using the "sample" method!\n\n')
                 parser.print_help()
                 sys.exit(1)
             else:
@@ -148,14 +150,13 @@ def get_args():
                 new_data[args.analysis_type][short_name] = workflow
         elif args.method == 'api':
             if not all((args.server,args.token)):
-                write_msg('err','Missing data! You must indicate the server name and input an API token when using the API method.\n\n')
+                write_msg('err','Missing data! You must indicate the server name and input an API token when using '
+                          'the API method.\n\n')
                 parser.print_help()
                 sys.exit(1)
             else:
                 host,ip = args.server.split(':')
                 ip = 'https://' + ip.lstrip('https://')
-                # if not ip.startswith('https://'):
-                    # ip = 'https://' + ip
                 new_data[host] = {
                     'ip' : ip,
                     'token' : args.token
@@ -179,11 +180,17 @@ def validate_file(flatfile,method):
         for line_num, line in enumerate(fh):
             terminal_string = line.rstrip('\n').split(',')[1]
             if method == 'sample' and terminal_string not in ('single','paired'):
-                sys.stderr.write('ERROR: Invalid string "{}" in following line of input file (expected only "single" or "paired"):\n'.format(terminal_string))
+                sys.stderr.write(
+                    'ERROR: Invalid string "{}" in following line of input file (expected only "single" '
+                    'or "paired"):\n'.format(terminal_string)
+                )
                 sys.stderr.write('{}: {}\n'.format(line_num,line))
                 sys.exit(1)
             elif method == 'api' and terminal_string in ('single', 'paired'):
-                sys.stderr.write('ERROR: Invalid string "{}" in following line of input file (expected an API token):\n'.format(terminal_string))
+                sys.stderr.write(
+                    'ERROR: Invalid string "{}" in following line of input file (expected an API token'
+                    ').\n'.format(terminal_string)
+                )
                 sys.stderr.write('{}: {}\n'.format(line_num,line))
                 sys.exit(1)
 
