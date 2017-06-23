@@ -2,8 +2,16 @@
 # Super quickie script to uncompress and unarchive IR data when downloaded directly from the 
 # IR REST API.  Took way longer to finally get around to writing this than it should!
 ##################################################################################################
-VERSION='1.4.0_041817'
+VERSION='1.5.0_062317'
 cwd=$(pwd)
+
+required_progs=('parallel' 'rename')
+for p in ${required_progs[@]}; do
+    command -v $p > /dev/null 2>&1 || {
+        echo "ERROR: $p is not found on this system but is required. Please install '$p' before proceeding."
+        exit 1
+    }
+done
 
 # Check for download_zips dir and make one if need be
 echo -n "Checking for a 'download_zips' directory..."
@@ -57,13 +65,22 @@ echo -n "Checking for a 'vcfs' directory to collect the VCF files..."
 if [[ ! -e $cwd/vcfs ]]; then
     echo -e "\n\tNo 'vcfs' directory found. Creating a new one."
     mkdir "$cwd/vcfs"
-else
+elif [[ $(find "$cwd/vcfs" -maxdepth 1 -name "*vcf") ]]; then
+    echo -e "\n\tWARN: There are VCF files already in this directory which may be overwritten by newer version!"
     echo "Done!"
 fi
 
 # Copy the VCF files into the new directory
 echo -n "Copying VCF files into 'vcfs' directory and trimming name..."
 find . -iname "*vcf" -not -name 'SmallVariants*vcf' -not -name '*_Filtered_*' -exec cp {} "$cwd/vcfs/" \; > /dev/null 2>&1
-# Fix stupid name from IR5.2
-cd vcfs && rename 's/_Non-Filtered.*/.vcf/' *vcf
+
+# Fix stupid name from IR5.2. If there is VCF here from an older analyis already when we do this, overwrite it. We always
+# want the latest file anyway.  
+cd vcfs
+for vcf in *vcf; do
+    if [[ $(echo $vcf | egrep '_Non-Filtered_201[78]-[0-9]{2}.*vcf') ]]; then
+        new_name=${vcf/_Non-Filtered*/.vcf}
+        mv $vcf $new_name
+    fi
+done
 echo "Done!"
