@@ -20,7 +20,7 @@ import zipfile
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '3.0.0_041817' 
+version = '3.0.1_072017' 
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
 
@@ -173,7 +173,7 @@ def main():
         count += 1
         sys.stdout.write('  [{}/{}]  Retrieving VCF data for analysis ID: {}...'.format(count,len(analysis_ids),expt))
         sys.stdout.flush()
-        query = {'format':'json','name':expt}
+        query = {'format':'json','name':expt,'exclude':'filteredvariants'}
         api_call(url,query,header,expt)
 
 if __name__ == '__main__':
