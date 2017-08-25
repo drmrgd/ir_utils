@@ -33,7 +33,7 @@ from collections import defaultdict
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '3.0.0_081517'
+version = '3.0.1_082517'
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_sample_creator_config.json'
 
 class Config(object):
@@ -285,10 +285,9 @@ def create_data_table(input_files, datatype, cellularity, gender, tumor_type):
     data = defaultdict(dict)
 
     if datatype == 'bam':
-        print('got here')
         for bam in input_files:
             sample,na_type = proc_bams(bam)
-            print('bam: {}; sample: {}; NA: {}'.format(bam,sample,na_type))
+            #print('bam: {}; sample: {}; NA: {}'.format(bam,sample,na_type))
             data[sample]['gender']      = gender
             data[sample]['tumor_type']  = tumor_type
             data[sample]['cellularity'] = cellularity
