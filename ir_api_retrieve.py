@@ -65,9 +65,10 @@ def get_args():
         help='API token if not entered into the config file yet.')
     parser.add_argument('-m','--method', metavar='<api_method_call>', 
         help='Method call / entry point to API. ****  Not yet implemented  ****')
-    parser.add_argument('-d', '--date_range', metavar='<Date_Range>', 
+    parser.add_argument('-d', '--date_range', metavar='<YYYY-MM-dd,YYYY-MM-dd>', 
         help='Range of dates in the format of "start,end" where each date is in the format '
-            'YYYY-MM-dd. This will be the range  which will be used to pull out results.')
+            'YYYY-MM-dd. This will be the range which will be used to pull out results. One '
+            'can input only 1 date if the range is only going to be one day.')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version)
     cli_args = parser.parse_args()
 
@@ -140,7 +141,10 @@ def api_call(url, query, header, batch_type, name=None):
         request.raise_for_status()
     except requests.exceptions.HTTPError as error:
         cprint('\n\n\t{}'.format(error), 'red', attrs=['bold'], file=sys.stderr)
-        cprint('\tSkipping analysis id: {}. Check ID for this run and try again.\n'.format(query['name']), 'red', attrs=['bold'], file=sys.stderr)
+        if batch_type == 'range':
+            cprint('\tThere may be no data available for the range input. Check the date range and try again.\n','red', attrs=['bold'], file=sys.stderr)
+        else:
+            cprint('\tSkipping analysis id: {}. Check ID for this run and try again.\n'.format(query['name']), 'red', attrs=['bold'], file=sys.stderr)
         return None
 
     json_data = request.json()
@@ -150,6 +154,7 @@ def api_call(url, query, header, batch_type, name=None):
     if batch_type == 'range':
         sys.stdout.write('Done!\n')
         sys.stdout.write('Total number to retrieve: %s.\n' % num_sets)
+        sys.stdout.flush()
 
     for analysis_set in json_data:
         data_link = analysis_set['data_links']
