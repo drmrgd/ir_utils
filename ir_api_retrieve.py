@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
-# Retrieve VCF data from an Ion Reporter Server based on run id.  Requires a config file that 
-# has information about the server from which we'll get data, as well as, the API token used
-# to access the IR API.  
-#
-# TODO: Completely re-written for speed!
-#       - Can we add some other method calls to the API now that we have requests generate 
-#         the query for us?
-#       - No longer get all settings and QC metrics, which not often used. maybe this is 
-#         good method for new method calls?
+# -*- coding: utf-8 -*-
 #
 # 4/1/2015 - D Sims
 ###############################################################################################
+"""
+Starting with a run name from IR or a batch list of run names in a file, grab the filtered and unfiltered variant
+call results from the IR API.  This script also requires an external config file with the API Token in order to access
+the server.
+"""
 import sys
 import os
 import argparse
 import json
 import requests
 import zipfile
+import datetime
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '3.0.1_072017' 
+version = '4.0.0_102717' 
 config_file = os.path.dirname(os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
 
@@ -53,19 +51,23 @@ class Config(object):
 def get_args():
     parser = argparse.ArgumentParser(
         formatter_class = lambda prog: argparse.HelpFormatter(prog, max_help_position=100, width=150),
-        description='''
-        Starting with a run name from IR or a batch list of run names in a file, grab the filtered and unfiltered variant
-        call results from the IR API.  This script also requires an external config file with the API Token in order to access
-        the server.
-        ''',
-        )
-    parser.add_argument('host', nargs='?', metavar='<hostname>', help="Hostname of server from which to gather data. Use '?' to print out all valid hosts.")
-    parser.add_argument('analysis_id', nargs='?', help='Analysis ID to retrieve if not using a batchfile')
-    parser.add_argument('-b','--batch', metavar='<batch_file>', help='Batch file of experiment names to retrieve')
-    parser.add_argument('-i', '--ip', metavar='<ip_address>', help='IP address if not entered into the config file yet.')
-    parser.add_argument('-t','--token', metavar='<ir_token>', help='API token if not entered into the config file yet.')
+        description = __doc__,
+    )
+    parser.add_argument('host', nargs='?', metavar='<hostname>', 
+        help="Hostname of server from which to gather data. Use '?' to print out all valid hosts.")
+    parser.add_argument('analysis_id', nargs='?', 
+        help='Analysis ID to retrieve if not using a batchfile')
+    parser.add_argument('-b','--batch', metavar='<batch_file>',
+        help='Batch file of experiment names to retrieve')
+    parser.add_argument('-i', '--ip', metavar='<ip_address>',
+        help='IP address if not entered into the config file yet.')
+    parser.add_argument('-t','--token', metavar='<ir_token>',
+        help='API token if not entered into the config file yet.')
     parser.add_argument('-m','--method', metavar='<api_method_call>', 
-            help='Method call / entry point to API. ****  Not yet implemented  ****')
+        help='Method call / entry point to API. ****  Not yet implemented  ****')
+    parser.add_argument('-d', '--date_range', metavar='<Date_Range>', 
+        help='Range of dates in the format of "start,end" where each date is in the format '
+            'YYYY-MM-dd. This will be the range  which will be used to pull out results.')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version)
     cli_args = parser.parse_args()
 
@@ -80,7 +82,19 @@ def get_args():
             sys.stderr.write("ERROR: You must either enter a host name or a custom IP and token!\n")
             sys.exit(1)
 
+    if cli_args.date_range:
+        start,end = cli_args.date_range.split(',')
+        __validate_date(start)
+        __validate_date(end)
+
     return cli_args
+
+def __validate_date(date):
+    try:
+        datetime.datetime.strptime(date, '%Y-%M-%d')
+    except ValueError:
+        sys.stderr.write("ERROR: the date '%s' is not in a valid format.  You must use YYYY-MM-dd.\n")
+        sys.exit(1)
 
 def get_host(hostname,hostdata=None):
     '''Return the IP address and API token of the server from which we wish to retrieve data'''
@@ -118,7 +132,7 @@ def proc_batchfile(batchfile):
     with open(batchfile) as fh:
         return [line.rstrip() for line in fh if line != '\n']
 
-def api_call(url,query,header,name):
+def api_call(url, query, header, batch_type, name=None):
     requests.packages.urllib3.disable_warnings()
     s = requests.Session()
     request = s.get(url,headers=header,params=query,verify=False)
@@ -130,18 +144,27 @@ def api_call(url,query,header,name):
         return None
 
     json_data = request.json()
-    data_link = json_data[0]['data_links']
-    if 'unfiltered_variants' in data_link:
-        zip_path = data_link['unfiltered_variants']
-    else:
-        zip_path = data_link
+    num_sets = len(json_data)
+    count = 0
 
-    zip_name = name + '_download.zip'
-    with open(zip_name, 'wb') as zip_fh:
-        response = s.get(zip_path,headers=header,verify=False)
-        zip_fh.write(response.content)
-    print('Done!')
-    return
+    if batch_type == 'range':
+        sys.stdout.write('Done!\n')
+        sys.stdout.write('Total number to retrieve: %s.\n' % num_sets)
+
+    for analysis_set in json_data:
+        data_link = analysis_set['data_links']
+        if batch_type == 'range':
+            count += 1
+            name = analysis_set['name']
+            sys.stdout.write('  [{}/{}] Retrieving VCF data for analysis ID: {}...'.format(count, num_sets, name))
+            sys.stdout.flush()
+        zip_name = name + '_download.zip'
+
+        with open(zip_name, 'wb') as zip_fh:
+            response = s.get(data_link, headers=header, verify=False)
+            zip_fh.write(response.content)
+
+        print('Done!')
 
 def main():
     cli_args = get_args()
@@ -159,7 +182,7 @@ def main():
         analysis_ids = proc_batchfile(cli_args.batch)
     elif cli_args.analysis_id:
         analysis_ids.append(cli_args.analysis_id)
-    else:
+    elif not cli_args.date_range:
         print("ERROR: No analysis ID or batch file loaded!")
         sys.exit(1)
 
@@ -167,14 +190,24 @@ def main():
     method='getvcf'
     url = server_url + method
 
-    sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(cli_args.host,len(analysis_ids)))
-    count = 0
-    for expt in analysis_ids:
-        count += 1
-        sys.stdout.write('  [{}/{}]  Retrieving VCF data for analysis ID: {}...'.format(count,len(analysis_ids),expt))
+    if cli_args.date_range:
+        start,end = cli_args.date_range.split(',')
+        sys.stdout.write('Getting list of results from IR {} for dates from {} to {}...'.format(cli_args.host, start, end))
         sys.stdout.flush()
-        query = {'format':'json','name':expt,'exclude':'filteredvariants'}
-        api_call(url,query,header,expt)
+        query = {'format' : 'json', 'start_date' : start, 'end_date' : end, 'exclude' : 'filteredvariants' }
+        api_call(url, query, header, 'range')
+    else:
+        sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(cli_args.host,len(analysis_ids)))
+        sys.stdout.flush()
+        count = 0
+        for expt in analysis_ids:
+            count += 1
+            sys.stdout.write('  [{}/{}]  Retrieving VCF data for analysis ID: {}...'.format(
+                count, len(analysis_ids), expt)
+            )
+            sys.stdout.flush()
+            query = {'format' : 'json', 'name' : expt, 'exclude' : 'filteredvariants'}
+            api_call(url, query, header, 'single', expt)
 
 if __name__ == '__main__':
     try:
