@@ -15,6 +15,7 @@ the server, which can be generated using the associated config_gen.py script.
 """
 import sys
 import os
+import io
 import argparse
 import json
 import requests
@@ -23,7 +24,7 @@ import datetime
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '4.1.122217' 
+version = '4.2.122217' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
@@ -56,15 +57,9 @@ class Config(object):
 
 
 def get_args():
-    parser = argparse.ArgumentParser(
-        formatter_class = lambda prog: argparse.HelpFormatter(
-            prog, max_help_position=100, width=150
-        ),
-        description = __doc__,
-    )
-    parser.add_argument('host', nargs='?', metavar='<hostname>', 
-        help="Hostname of server from which to gather data. Use '?' to print out "
-            "all valid hosts.")
+    parser = argparse.ArgumentParser(description = __doc__)
+    parser.add_argument('host', nargs='?', help="Hostname of server from which "
+        "to gather data. Use '?' to print out all valid hosts.")
     parser.add_argument('analysis_id', nargs='?', 
         help='Analysis ID to retrieve if not using a batchfile')
     parser.add_argument('-b','--batch', metavar='<batch_file>',
@@ -73,16 +68,17 @@ def get_args():
         help='IP address if not entered into the config file yet.')
     parser.add_argument('-t','--token', metavar='<ir_token>',
         help='API token if not entered into the config file yet.')
-    parser.add_argument('-m','--method', metavar='<api_method_call>', default='getvcf',
-        help='Method call / entry point to API.  See documentation for details, '
-            'but current values are "getvcf", "download", and "analysis".')
+    parser.add_argument('-m','--method', metavar='<api_method_call>', 
+        default='getvcf', help='Method call / entry point to API.')
     parser.add_argument('-d', '--date_range', metavar='<YYYY-MM-dd,YYYY-MM-dd>', 
-        help='Range of dates in the format of "start,end" where each date is in the format '
-            'YYYY-MM-dd. This will be the range which will be used to pull out results. One '
-            'can input only 1 date if the range is only going to be one day.')
+        help='Range of dates in the format of "start,end" where each date is in '
+        'the format YYYY-MM-dd. This will be the range which will be used to '
+        'pull out results. One can input only 1 date if the range is only going '
+        'to be one day.')
     parser.add_argument('-r', '--rna', action='store_true', 
         help='Download the RNA BAM file instead of the VCF data.')
-    parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version)
+    parser.add_argument('-v', '--version', action='version', 
+            version='%(prog)s ' + version)
     cli_args = parser.parse_args()
 
     if not cli_args.host:
@@ -98,11 +94,6 @@ def get_args():
             sys.stderr.write("ERROR: You must either enter a host name or a custom "
                 "IP and token!\n")
             sys.exit(1)
-
-    if cli_args.date_range:
-        start,end = cli_args.date_range.split(',')
-        __validate_date(start)
-        __validate_date(end)
 
     return cli_args
 
@@ -156,10 +147,19 @@ def proc_batchfile(batchfile):
     with open(batchfile) as fh:
         return [line.rstrip() for line in fh if line != '\n']
 
-def api_call(url, query, header, batch_type, name=None):
+def api_call(url, query, header, batch_type, get_rna, name=None):
+    """
+    TODO: We are not using this method right.  We are both making api calls and
+    processing data here, and that's not good.  If we have a set of analysis IDs,
+    then we iterate through them in main().  But if we have a date range dataset,
+    then we are iterating through it here.  I should be only returning the JSON
+    object if we have a range, extracing the values into the analysis args list, 
+    and then using the loop I have in main() to process them all.  Need to refactor
+    and shuffle some code around.
+    """
     requests.packages.urllib3.disable_warnings()
     s = requests.Session()
-    request = s.get(url,headers=header,params=query,verify=False)
+    request = s.get(url, headers=header, params=query, verify=False)
     try:
         request.raise_for_status()
     except requests.exceptions.HTTPError as error:
@@ -169,14 +169,14 @@ def api_call(url, query, header, batch_type, name=None):
                 'the date range and try again.\n','red', 
                 attrs=['bold'], file=sys.stderr)
         else:
-            cprint('\tSkipping analysis id: {}. Check ID for this run and try '
-                'again.\n'.format(query['name']), 'red', 
-                attrs=['bold'], file=sys.stderr)
+            cprint('\tSkipping analysis id: %s. Check ID for this run and try '
+                'again.\n' % query['name'], 'red', attrs=['bold'], file=sys.stderr)
         return None
 
     json_data = request.json()
     num_sets = len(json_data)
     count = 0
+    datatype = 'VCF data'
 
     if batch_type == 'range':
         sys.stdout.write('Done!\n')
@@ -185,19 +185,40 @@ def api_call(url, query, header, batch_type, name=None):
 
     for analysis_set in json_data:
         data_link = analysis_set['data_links']
+        if get_rna:
+            data_link = make_rna_datalink(data_link, s, header)
+            datatype = 'RNA BAM file'
+
         if batch_type == 'range':
             count += 1
             name = analysis_set['name']
-            sys.stdout.write('  [{}/{}] Retrieving VCF data for analysis ID: '
-                '{}...'.format(count, num_sets, name))
+            sys.stdout.write('  [{}/{}] Retrieving {} for analysis ID: '
+                '{}...'.format(count, num_sets, datatype, name))
             sys.stdout.flush()
         zip_name = name + '_download.zip'
 
         with open(zip_name, 'wb') as zip_fh:
             response = s.get(data_link, headers=header, verify=False)
             zip_fh.write(response.content)
-
         print('Done!')
+
+def make_rna_datalink(string, session, header):
+    """
+    Have to get the RNA BAM file name, which is going to be stored in an RRS file
+    that contains the sample name.
+    """
+    data_dir, vcfzip = os.path.split(string)
+    rrs_file = '{}_RNA_{}.rrs'.format(*vcfzip.split('_'))
+    sys.stdout.write('\n\tGetting RNA BAM filename....')
+    sys.stdout.flush()
+
+    response = session.get(data_dir +'/'+ rrs_file, headers=header, verify=False)
+    z = zipfile.ZipFile(io.BytesIO(response.content))
+    data = z.read(rrs_file).decode('utf-8')
+    elems = data.split()
+    rna_bam = os.path.basename(elems[-1]).replace('.bam','',1) + '_merged.bam'
+    sys.stdout.write('Done!') 
+    return os.path.dirname(string) + '/outputs/RNACountsActor-00/' + rna_bam
 
 def main():
     cli_args = get_args()
@@ -225,11 +246,16 @@ def main():
     }
     method=cli_args.method
     url = server_url + method
-    pp(url)
-    sys.exit()
+    #print('::DEBUG:: formated base url: {}'.format(url))
 
     if cli_args.date_range:
-        start,end = cli_args.date_range.split(',')
+        # Allow for one to just put one date to look for data on that date alone
+        start, end = (cli_args.date_range.split(',') + [None]*2)[:2]
+        if end is None:
+            end = start
+        __validate_date(start)
+        __validate_date(end)
+
         sys.stdout.write('Getting list of results from IR {} for dates from {} '
             'to {}...'.format(cli_args.host, start, end))
         sys.stdout.flush()
@@ -239,7 +265,7 @@ def main():
             'end_date' : end, 
             'exclude' : 'filteredvariants' 
         }
-        api_call(url, query, header, 'range')
+        api_call(url, query, header, cli_args.rna, 'range')
     else:
         sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(
             cli_args.host,len(analysis_ids)))
@@ -250,8 +276,12 @@ def main():
             sys.stdout.write('  [{}/{}]  Retrieving VCF data for analysis ID: '
                 '{}...'.format(count, len(analysis_ids), expt))
             sys.stdout.flush()
-            query = {'format' : 'json', 'name' : expt, 'exclude' : 'filteredvariants'}
-            api_call(url, query, header, 'single', expt)
+            query = {
+                'format'  : 'json', 
+                'name'    : expt, 
+                'exclude' : 'filteredvariants'
+            }
+            api_call(url, query, header, 'single', cli_args.rna, expt)
 
 if __name__ == '__main__':
     try:
