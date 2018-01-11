@@ -24,7 +24,7 @@ import datetime
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '4.2.122217' 
+version = '5.0.011118' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
@@ -74,7 +74,10 @@ def get_args():
         help='Range of dates in the format of "start,end" where each date is in '
         'the format YYYY-MM-dd. This will be the range which will be used to '
         'pull out results. One can input only 1 date if the range is only going '
-        'to be one day.')
+        'to be one day. Note that this method is a bit slow as every run seems to '
+        'be checked for inclusion, as well, as the fact that anything within the '
+        'range will be downloaded. So, choose this method only if it is faster than'
+        'just simply copy / pasting a discrete list of IDs you want!')
     parser.add_argument('-r', '--rna', action='store_true', 
         help='Download the RNA BAM file instead of the VCF data.')
     parser.add_argument('-v', '--version', action='version', 
@@ -147,16 +150,23 @@ def proc_batchfile(batchfile):
     with open(batchfile) as fh:
         return [line.rstrip() for line in fh if line != '\n']
 
+def make_rna_datalink(string, session, header):
+    """
+    Have to get the RNA BAM file name, which is going to be stored in an RRS file
+    that contains the sample name.
+    """
+    data_dir, vcfzip = os.path.split(string)
+    rrs_file = '{}_RNA_{}.rrs'.format(*vcfzip.split('_'))
+
+    response = session.get(data_dir +'/'+ rrs_file, headers=header, verify=False)
+
+    z = zipfile.ZipFile(io.BytesIO(response.content))
+    data = z.read(rrs_file).decode('utf-8')
+    elems = data.split()
+    rna_bam = os.path.basename(elems[-1]).replace('.bam','',1) + '_merged.bam'
+    return os.path.dirname(string) + '/outputs/RNACountsActor-00/' + rna_bam
+
 def api_call(url, query, header, batch_type, get_rna, name=None):
-    """
-    TODO: We are not using this method right.  We are both making api calls and
-    processing data here, and that's not good.  If we have a set of analysis IDs,
-    then we iterate through them in main().  But if we have a date range dataset,
-    then we are iterating through it here.  I should be only returning the JSON
-    object if we have a range, extracing the values into the analysis args list, 
-    and then using the loop I have in main() to process them all.  Need to refactor
-    and shuffle some code around.
-    """
     requests.packages.urllib3.disable_warnings()
     s = requests.Session()
     request = s.get(url, headers=header, params=query, verify=False)
@@ -174,14 +184,15 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
         return None
 
     json_data = request.json()
-    num_sets = len(json_data)
+
     count = 0
     datatype = 'VCF data'
 
     if batch_type == 'range':
         sys.stdout.write('Done!\n')
-        sys.stdout.write('Total number to retrieve: %s.\n' % num_sets)
+        sys.stdout.write('Total number to retrieve: %s.\n' % len(json_data))
         sys.stdout.flush()
+        return [x['name'] for x in json_data]
 
     for analysis_set in json_data:
         data_link = analysis_set['data_links']
@@ -189,39 +200,19 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
             data_link = make_rna_datalink(data_link, s, header)
             datatype = 'RNA BAM file'
 
-        if batch_type == 'range':
-            count += 1
-            name = analysis_set['name']
-            sys.stdout.write('  [{}/{}] Retrieving {} for analysis ID: '
-                '{}...'.format(count, num_sets, datatype, name))
-            sys.stdout.flush()
         zip_name = name + '_download.zip'
-
         with open(zip_name, 'wb') as zip_fh:
             response = s.get(data_link, headers=header, verify=False)
             zip_fh.write(response.content)
         print('Done!')
 
-def make_rna_datalink(string, session, header):
-    """
-    Have to get the RNA BAM file name, which is going to be stored in an RRS file
-    that contains the sample name.
-    """
-    data_dir, vcfzip = os.path.split(string)
-    rrs_file = '{}_RNA_{}.rrs'.format(*vcfzip.split('_'))
-    sys.stdout.write('\n\tGetting RNA BAM filename....')
-    sys.stdout.flush()
-
-    response = session.get(data_dir +'/'+ rrs_file, headers=header, verify=False)
-    z = zipfile.ZipFile(io.BytesIO(response.content))
-    data = z.read(rrs_file).decode('utf-8')
-    elems = data.split()
-    rna_bam = os.path.basename(elems[-1]).replace('.bam','',1) + '_merged.bam'
-    sys.stdout.write('Done!') 
-    return os.path.dirname(string) + '/outputs/RNACountsActor-00/' + rna_bam
-
 def main():
     cli_args = get_args()
+    if cli_args.rna:
+        datatype = 'RNA BAM file'
+    else:
+        datatype = 'VCF data'
+
     program_config = Config.read_config(config_file)
     
     if cli_args.ip and cli_args.token:
@@ -265,23 +256,24 @@ def main():
             'end_date' : end, 
             'exclude' : 'filteredvariants' 
         }
-        api_call(url, query, header, cli_args.rna, 'range')
-    else:
-        sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(
-            cli_args.host,len(analysis_ids)))
+        analysis_ids = api_call(url, query, header, 'range', cli_args.rna)
+    
+    sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(
+        cli_args.host, len(analysis_ids)))
+    sys.stdout.flush()
+    count = 0
+    for expt in analysis_ids:
+        count += 1
+        sys.stdout.write('  [{}/{}]  Retrieving {} for analysis ID: {}...'.format(
+            count, len(analysis_ids), datatype, expt)
+        )
         sys.stdout.flush()
-        count = 0
-        for expt in analysis_ids:
-            count += 1
-            sys.stdout.write('  [{}/{}]  Retrieving VCF data for analysis ID: '
-                '{}...'.format(count, len(analysis_ids), expt))
-            sys.stdout.flush()
-            query = {
-                'format'  : 'json', 
-                'name'    : expt, 
-                'exclude' : 'filteredvariants'
-            }
-            api_call(url, query, header, 'single', cli_args.rna, expt)
+        query = {
+            'format'  : 'json', 
+            'name'    : expt, 
+            'exclude' : 'filteredvariants'
+        }
+        api_call(url, query, header, 'single', cli_args.rna, expt)
 
 if __name__ == '__main__':
     try:
