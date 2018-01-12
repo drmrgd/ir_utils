@@ -16,6 +16,7 @@ the server, which can be generated using the associated config_gen.py script.
 import sys
 import os
 import io
+import re
 import argparse
 import json
 import requests
@@ -24,7 +25,7 @@ import datetime
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '5.0.011118' 
+version = '5.1.011218' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
@@ -150,25 +151,37 @@ def proc_batchfile(batchfile):
     with open(batchfile) as fh:
         return [line.rstrip() for line in fh if line != '\n']
 
-def make_rna_datalink(string, session, header):
+def make_rna_datalink(run_summary, session, header):
     """
     Have to get the RNA BAM file name, which is going to be stored in an RRS file
     that contains the sample name.
     """
-    data_dir, vcfzip = os.path.split(string)
-    rrs_file = '{}_RNA_{}.rrs'.format(*vcfzip.split('_'))
+    data_dir = os.path.dirname(run_summary['data_links']['unfiltered_variants'])
+    try:
+        rna_sample = run_summary['samples']['RNA']
+    except KeyError:
+        sys.stderr.write("ERROR: No RNA sample information for for run: {}! "
+            "Was there an RNA run with this set?\n".format(run_summary['name']))
+        return None
+    rrs_file = rna_sample + '.rrs'
 
-    response = session.get(data_dir +'/'+ rrs_file, headers=header, verify=False)
-
+    response = session.get(data_dir + '/' + rrs_file, headers=header,
+        verify=False)
     z = zipfile.ZipFile(io.BytesIO(response.content))
     data = z.read(rrs_file).decode('utf-8')
     elems = data.split()
-    rna_bam = os.path.basename(elems[-1]).replace('.bam','',1) + '_merged.bam'
-    return os.path.dirname(string) + '/outputs/RNACountsActor-00/' + rna_bam
+    rna_bam = os.path.basename(elems[-1]).replace('.bam', '', 1) + '_merged.bam'
+    return data_dir + '/outputs/RNACountsActor-00/' + rna_bam
 
 def api_call(url, query, header, batch_type, get_rna, name=None):
     requests.packages.urllib3.disable_warnings()
     s = requests.Session()
+
+    # If we want to get RNA files, we need to get the officially entered RNA 
+    # name, which means we need to get a summary call.
+    if get_rna:
+        url = url.replace('getvcf', 'analysis')
+
     request = s.get(url, headers=header, params=query, verify=False)
     try:
         request.raise_for_status()
@@ -184,7 +197,6 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
         return None
 
     json_data = request.json()
-
     count = 0
     datatype = 'VCF data'
 
@@ -195,10 +207,13 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
         return [x['name'] for x in json_data]
 
     for analysis_set in json_data:
-        data_link = analysis_set['data_links']
         if get_rna:
-            data_link = make_rna_datalink(data_link, s, header)
+            data_link = make_rna_datalink(analysis_set, s, header)
             datatype = 'RNA BAM file'
+            if not data_link:
+                return None
+        else:
+            data_link = analysis_set['data_links']
 
         zip_name = name + '_download.zip'
         with open(zip_name, 'wb') as zip_fh:
