@@ -22,10 +22,12 @@ import json
 import requests
 import zipfile
 import datetime
+import progressbar
+
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '5.1.011218' 
+version = '6.0.121018' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
@@ -59,30 +61,66 @@ class Config(object):
 
 def get_args():
     parser = argparse.ArgumentParser(description = __doc__)
-    parser.add_argument('host', nargs='?', help="Hostname of server from which "
-        "to gather data. Use '?' to print out all valid hosts.")
-    parser.add_argument('analysis_id', nargs='?', 
-        help='Analysis ID to retrieve if not using a batchfile')
-    parser.add_argument('-b','--batch', metavar='<batch_file>',
-        help='Batch file of experiment names to retrieve')
-    parser.add_argument('-i', '--ip', metavar='<ip_address>',
-        help='IP address if not entered into the config file yet.')
-    parser.add_argument('-t','--token', metavar='<ir_token>',
-        help='API token if not entered into the config file yet.')
-    parser.add_argument('-m','--method', metavar='<api_method_call>', 
-        default='getvcf', help='Method call / entry point to API.')
-    parser.add_argument('-d', '--date_range', metavar='<YYYY-MM-dd,YYYY-MM-dd>', 
+    parser.add_argument(
+        'host', 
+        nargs='?', 
+        help="Hostname of server from which to gather data. Use '?' to print "
+            "out all valid hosts."
+    )
+    parser.add_argument(
+        'analysis_id', 
+        nargs='?', 
+        help='Analysis ID to retrieve if not using a batchfile'
+    )
+    parser.add_argument(
+        '-b','--batch', 
+        metavar='<batch_file>',
+        help='Batch file of experiment names to retrieve'
+    )
+    parser.add_argument(
+        '-i', '--ip', 
+        metavar='<ip_address>',
+        help='IP address if not entered into the config file yet.'
+    )
+    parser.add_argument(
+        '-t','--token', 
+        metavar='<ir_token>',
+        help='API token if not entered into the config file yet.'
+    )
+    parser.add_argument(
+        '-m','--method', 
+        metavar='<api_method_call>', 
+        default='getvcf', 
+        help='Method call / entry point to API.'
+    )
+    parser.add_argument(
+        '-r', '--rna', 
+        action='store_true', 
+        help='Download the RNA BAM file instead of the VCF data.'
+    )
+    parser.add_argument(
+        '-d', '--dna',
+        action = 'store_true',
+        help='Download the DNA BAM file instead of the VCF data. This can take a '
+            'very long time, and is only recommended if you have no other way to '
+            'retrieve a DNA BAM file.  Getting directly from TS is preferred!'
+    )
+    parser.add_argument(
+        '--date_range', 
+        metavar='<YYYY-MM-dd,YYYY-MM-dd>', 
         help='Range of dates in the format of "start,end" where each date is in '
         'the format YYYY-MM-dd. This will be the range which will be used to '
         'pull out results. One can input only 1 date if the range is only going '
-        'to be one day. Note that this method is a bit slow as every run seems to '
-        'be checked for inclusion, as well, as the fact that anything within the '
-        'range will be downloaded. So, choose this method only if it is faster than'
-        'just simply copy / pasting a discrete list of IDs you want!')
-    parser.add_argument('-r', '--rna', action='store_true', 
-        help='Download the RNA BAM file instead of the VCF data.')
-    parser.add_argument('-v', '--version', action='version', 
-            version='%(prog)s ' + version)
+        'to be one day. Note that this method is a bit slow as every run seems '
+        'to be checked for inclusion, as well, as the fact that anything within '
+        'the range will be downloaded. So, choose this method only if it is '
+        'faster than just simply copy / pasting a discrete list of IDs you want!'
+    )
+    parser.add_argument(
+        '-v', '--version', 
+        action='version', 
+        version='%(prog)s - v' + version
+    )
     cli_args = parser.parse_args()
 
     if not cli_args.host:
@@ -98,6 +136,12 @@ def get_args():
             sys.stderr.write("ERROR: You must either enter a host name or a custom "
                 "IP and token!\n")
             sys.exit(1)
+
+    # TODO:
+    # if cli_args.dna:
+        # sys.stderr.write('ERROR: Downloading of DNA BAM files through this '
+            # 'tool is not yet supported.\n')
+        # sys.exit(1)
 
     return cli_args
 
@@ -151,35 +195,54 @@ def proc_batchfile(batchfile):
     with open(batchfile) as fh:
         return [line.rstrip() for line in fh if line != '\n']
 
-def make_rna_datalink(run_summary, session, header):
+def make_bam_datalink(na_type, run_summary, session, header):
     """
-    Have to get the RNA BAM file name, which is going to be stored in an RRS file
-    that contains the sample name.
+    Have to get the DNA or RNA BAM file name, which is going to be stored in an 
+    RRS file that contains the sample name. 
+
+    The RRS file will contain the information we need to find the BAM file. 
+    In the case of the DNA BAM, we can just follow the path outlined.  In the
+    case of the RNA BAM, we need the one from the /outputs/RNACountsActor-00
+    dir, but we don't know the barcode without reading the RRS file, and we 
+    need to add the '_merged' string to the name.
     """
     data_dir = os.path.dirname(run_summary['data_links']['unfiltered_variants'])
     try:
-        rna_sample = run_summary['samples']['RNA']
+        ir_sample_name = run_summary['samples'][na_type]
     except KeyError:
-        sys.stderr.write("ERROR: No RNA sample information for for run: {}! "
-            "Was there an RNA run with this set?\n".format(run_summary['name']))
+        sys.stderr.write("ERROR: No {} sample information for for run: {}! "
+            "Was there an RNA run with this set?\n".format(
+                na_type, run_summary['name'])
+        )
         return None
-    rrs_file = rna_sample + '.rrs'
+
+    rrs_file = ir_sample_name + '.rrs'
 
     response = session.get(data_dir + '/' + rrs_file, headers=header,
         verify=False)
     z = zipfile.ZipFile(io.BytesIO(response.content))
-    data = z.read(rrs_file).decode('utf-8')
+    data = z.read(rrs_file).decode('ascii')
     elems = data.split()
-    rna_bam = os.path.basename(elems[-1]).replace('.bam', '', 1) + '_merged.bam'
-    return data_dir + '/outputs/RNACountsActor-00/' + rna_bam
+    
+    if na_type == 'RNA':
+        rna_bam = os.path.basename(elems[-1]).replace('.bam', '', 1) + '_merged.bam'
+        api_path = data_dir + '/outputs/RNACountsActor-00/' + rna_bam 
+        return api_path
+    elif na_type == 'DNA':
+        # TODO: This method has some issues and I'm not sure this is going to
+        #       work. I think the file size is too large to download through 
+        #       the API.  Will work on this later.
+        dna_bam = elems.pop().rstrip('\n')
+        api_path = '{}={}'.format(data_dir.split('=')[0], dna_bam)
+        return api_path
 
-def api_call(url, query, header, batch_type, get_rna, name=None):
+def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
     requests.packages.urllib3.disable_warnings()
     s = requests.Session()
 
     # If we want to get RNA files, we need to get the officially entered RNA 
     # name, which means we need to get a summary call.
-    if get_rna:
+    if get_rna or get_dna:
         url = url.replace('getvcf', 'analysis')
 
     request = s.get(url, headers=header, params=query, verify=False)
@@ -197,7 +260,6 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
         return None
 
     json_data = request.json()
-    count = 0
     datatype = 'VCF data'
 
     if batch_type == 'range':
@@ -208,8 +270,13 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
 
     for analysis_set in json_data:
         if get_rna:
-            data_link = make_rna_datalink(analysis_set, s, header)
+            data_link = make_bam_datalink('RNA', analysis_set, s, header)
             datatype = 'RNA BAM file'
+            if not data_link:
+                return None
+        elif get_dna:
+            data_link = make_bam_datalink('DNA', analysis_set, s, header)
+            datatype = 'DNA BAM file'
             if not data_link:
                 return None
         else:
@@ -217,14 +284,61 @@ def api_call(url, query, header, batch_type, get_rna, name=None):
 
         zip_name = name + '_download.zip'
         with open(zip_name, 'wb') as zip_fh:
-            response = s.get(data_link, headers=header, verify=False)
-            zip_fh.write(response.content)
-        print('Done!')
+            response = s.get(data_link, headers=header, verify=False, 
+                stream=True)
+            
+            total_size = response.headers.get('content-length', None)
+            prog_bar2(response, total_size, zip_fh)
+    print('Done!\n')
+
+def prog_bar2(response, size, fh):
+    """
+    Using the ProgressBar2 library, generate a progress bar to help determine
+    the download speed, time, etc.  Not very useful for VCF files as they come
+    down almost instantly.  But, for BAM files, helpful to get an idea of how 
+    long it'll take to get here.  For DNA BAM files, we don't know the size, so
+    just output the amount downloaded, speed, etc.  For RNA BAM, can get a whole
+    set of data.
+    """
+    wrote = 0
+
+    if size is None:
+        # Have a DNA BAM and don't know the actual size.
+        widgets = [
+            'Downloaded: ',
+            progressbar.DataSize(),
+            '; (',
+            progressbar.FileTransferSpeed(), ' | ', progressbar.Timer(), ')',
+        ]
+        pbar = progressbar.ProgressBar(
+            widgets=widgets, 
+            maxval=progressbar.UnknownLength
+        ).start()
+    else:
+        widgets = [
+            progressbar.Percentage(),
+            progressbar.Bar(marker="=", left=" [", right="] "),
+            progressbar.DataSize(), 
+            ' of ', 
+            progressbar.DataSize(variable='max_value'), 
+            " (", progressbar.FileTransferSpeed(), ", ", progressbar.ETA(), " )",
+        ]
+        size = int(size)
+        pbar = progressbar.ProgressBar(widgets=widgets, maxval=size).start()
+
+    for buf in response.iter_content(1024):
+        if buf:
+            fh.write(buf)
+            wrote += len(buf)
+            pbar.update(wrote)
+    pbar.finish()
 
 def main():
     cli_args = get_args()
     if cli_args.rna:
         datatype = 'RNA BAM file'
+    elif cli_args.dna:
+        datatype = 'DNA BAM file'
     else:
         datatype = 'VCF data'
 
@@ -271,7 +385,8 @@ def main():
             'end_date' : end, 
             'exclude' : 'filteredvariants' 
         }
-        analysis_ids = api_call(url, query, header, 'range', cli_args.rna)
+        analysis_ids = api_call(url, query, header, 'range', cli_args.rna, 
+            cli_args.dna)
     
     sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(
         cli_args.host, len(analysis_ids)))
@@ -288,7 +403,9 @@ def main():
             'name'    : expt, 
             'exclude' : 'filteredvariants'
         }
-        api_call(url, query, header, 'single', cli_args.rna, expt)
+
+        # query['view'] = 'summary'
+        api_call(url, query, header, 'single', cli_args.rna, cli_args.dna, expt)
 
 if __name__ == '__main__':
     try:
