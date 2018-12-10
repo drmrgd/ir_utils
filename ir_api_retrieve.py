@@ -160,9 +160,9 @@ def get_host(hostname, hostdata=None):
     """
 
     if hostname == '?':
-        print("Current list of valid list of hosts are: ")
+        sys.stderr.write("Current list of valid list of hosts are: \n")
         for host in hostdata:
-            print("\t{}".format(host))
+            sys.stderr.write("\t{}\n".format(host))
         sys.exit()
     else:
         try:
@@ -289,7 +289,7 @@ def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
             
             total_size = response.headers.get('content-length', None)
             prog_bar2(response, total_size, zip_fh)
-    print('Done!\n')
+    sys.stderr.write('Done!\n\n')
 
 def prog_bar2(response, size, fh):
     """
@@ -324,7 +324,7 @@ def prog_bar2(response, size, fh):
             " (", progressbar.FileTransferSpeed(), ", ", progressbar.ETA(), " )",
         ]
         size = int(size)
-        pbar = progressbar.ProgressBar(widgets=widgets, maxval=size).start()
+        pbar = progressbar.ProgressBar(widgets=widgets, maxval=size, term_width=100).start()
 
     for buf in response.iter_content(1024):
         if buf:
@@ -357,7 +357,7 @@ def main():
     elif cli_args.analysis_id:
         analysis_ids.append(cli_args.analysis_id)
     elif not cli_args.date_range:
-        print("ERROR: No analysis ID or batch file loaded!")
+        sys.stderr.write("ERROR: No analysis ID or batch file loaded!\n")
         sys.exit(1)
 
     header = {
@@ -388,13 +388,13 @@ def main():
         analysis_ids = api_call(url, query, header, 'range', cli_args.rna, 
             cli_args.dna)
     
-    sys.stdout.write('Getting data from IR {} (total runs: {}).\n'.format(
+    sys.stdout.write('Getting data from IR {} (total runs: {}).\n\n'.format(
         cli_args.host, len(analysis_ids)))
     sys.stdout.flush()
     count = 0
     for expt in analysis_ids:
         count += 1
-        sys.stdout.write('  [{}/{}]  Retrieving {} for analysis ID: {}...'.format(
+        sys.stdout.write('[{}/{}]  Retrieving {} for analysis ID: {}...\n'.format(
             count, len(analysis_ids), datatype, expt)
         )
         sys.stdout.flush()
