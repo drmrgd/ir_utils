@@ -27,7 +27,7 @@ import progressbar
 from termcolor import colored,cprint
 from pprint import pprint as pp
 
-version = '6.0.121018' 
+version = '6.1.012619' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
@@ -53,8 +53,8 @@ class Config(object):
             with open(config_file) as fh:
                 data = json.load(fh)
         except IOError:
-            sys.stderr.write("ERROR: No configuration file found. Do you need to "
-                "run the config_gen.py script first?\n")
+            sys.stderr.write("ERROR: No configuration file found. Do you need "
+                "to run the config_gen.py script first?\n")
             sys.exit(1)
         return data
 
@@ -62,20 +62,21 @@ class Config(object):
 def get_args():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument(
-        'host', 
-        nargs='?', 
-        help="Hostname of server from which to gather data. Use '?' to print "
-            "out all valid hosts."
-    )
-    parser.add_argument(
         'analysis_id', 
         nargs='?', 
         help='Analysis ID to retrieve if not using a batchfile'
     )
     parser.add_argument(
+        '-H', '--Host', 
+        metavar="<server_hostname>",
+        help="Hostname of server from which to gather data. Use '?' to print "
+            "out all valid hosts as defined in your config file."
+    )
+    parser.add_argument(
         '-b','--batch', 
         metavar='<batch_file>',
-        help='Batch file of experiment names to retrieve'
+        help='Batch file of experiment names to retrieve. Batchfile must '
+            'contain an analysis ID, one per line.'
     )
     parser.add_argument(
         '-i', '--ip', 
@@ -123,7 +124,7 @@ def get_args():
     )
     cli_args = parser.parse_args()
 
-    if not cli_args.host:
+    if not cli_args.Host:
         if cli_args.ip and not cli_args.token:
             sys.stderr.write("ERROR: You must enter a custom token with the '-t'"
                 " option if you are using a custom IP.\n")
@@ -136,13 +137,6 @@ def get_args():
             sys.stderr.write("ERROR: You must either enter a host name or a custom "
                 "IP and token!\n")
             sys.exit(1)
-
-    # TODO:
-    # if cli_args.dna:
-        # sys.stderr.write('ERROR: Downloading of DNA BAM files through this '
-            # 'tool is not yet supported.\n')
-        # sys.exit(1)
-
     return cli_args
 
 def __validate_date(date):
@@ -158,7 +152,6 @@ def get_host(hostname, hostdata=None):
     Return the IP address and API token of the server from which we wish to 
     retrieve data
     """
-
     if hostname == '?':
         sys.stderr.write("Current list of valid list of hosts are: \n")
         for host in hostdata:
@@ -229,9 +222,6 @@ def make_bam_datalink(na_type, run_summary, session, header):
         api_path = data_dir + '/outputs/RNACountsActor-00/' + rna_bam 
         return api_path
     elif na_type == 'DNA':
-        # TODO: This method has some issues and I'm not sure this is going to
-        #       work. I think the file size is too large to download through 
-        #       the API.  Will work on this later.
         dna_bam = elems.pop().rstrip('\n')
         api_path = '{}={}'.format(data_dir.split('=')[0], dna_bam)
         return api_path
@@ -341,14 +331,16 @@ def main():
         datatype = 'DNA BAM file'
     else:
         datatype = 'VCF data'
-
-    program_config = Config.read_config(config_file)
     
+    server = cli_args.Host if cli_args.Host else cli_args.ip
+
     if cli_args.ip and cli_args.token:
         server_url = format_url(cli_args.ip) 
         api_token = cli_args.token
     else:
-        server_url,api_token = get_host(cli_args.host,program_config['hosts'])
+        program_config = Config.read_config(config_file)
+        server_url, api_token = get_host(cli_args.Host, program_config['hosts'])
+
     server_url += '/api/v1/'
 
     analysis_ids=[]
@@ -377,7 +369,7 @@ def main():
         __validate_date(end)
 
         sys.stdout.write('Getting list of results from IR {} for dates from {} '
-            'to {}...'.format(cli_args.host, start, end))
+            'to {}...'.format(server, start, end))
         sys.stdout.flush()
         query = {
             'format' : 'json', 
@@ -385,11 +377,12 @@ def main():
             'end_date' : end, 
             'exclude' : 'filteredvariants' 
         }
+
         analysis_ids = api_call(url, query, header, 'range', cli_args.rna, 
             cli_args.dna)
     
     sys.stdout.write('Getting data from IR {} (total runs: {}).\n\n'.format(
-        cli_args.host, len(analysis_ids)))
+        server, len(analysis_ids)))
     sys.stdout.flush()
     count = 0
     for expt in analysis_ids:
@@ -403,8 +396,6 @@ def main():
             'name'    : expt, 
             'exclude' : 'filteredvariants'
         }
-
-        # query['view'] = 'summary'
         api_call(url, query, header, 'single', cli_args.rna, cli_args.dna, expt)
 
 if __name__ == '__main__':
