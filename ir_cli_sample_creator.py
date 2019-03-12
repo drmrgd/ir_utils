@@ -267,7 +267,7 @@ def get_choice(query):
 
     while True:
         sys.stdout.write(query + prompt)
-        choice = raw_input().lower()
+        choice = input().lower()
         if choice in valid_choices:
             if valid_choices[choice] == 1:
                 return False 
@@ -275,7 +275,7 @@ def get_choice(query):
                 sys.stdout.write("Exiting so that we don't overwrite old data!\n")
                 sys.exit(1)
             elif valid_choices[choice] == 3:
-                return raw_input("New name: ")
+                return input("New name: ")
         else:
             sys.stdout.write("Invalid choice '{}'!\n".format(choice))
 
