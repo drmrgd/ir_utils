@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 # TODO:
-#    - Need to add a function to import data from a flat file.  If the DNA and RNA names are
-#      not the same, it's tough to figure out how to pair them correctly.  So we have to gen
-#      the files and then manually edit them! 
+#    - Need to add a function to import data from a flat file.  If the DNA and 
+#      RNA names are not the same, it's tough to figure out how to pair them
+#      correctly.  So we have to gen the files and then manually edit them! 
 #
 # 12/9/2015 - D Sims
-###############################################################################################
+################################################################################
 """
 Generate a 'sample.list' and 'sample.meta' fileset for a group of BAMs to put 
 into IR and process.The filenames must be underscore delimited to indicate:
@@ -31,10 +32,10 @@ import time
 import json
 import random
 from collections import defaultdict
-from termcolor import colored,cprint
-from pprint import pprint as pp
+from termcolor import cprint
+from pprint import pprint as pp  # noqa
 
-version = '4.0.031219'
+version = '4.1.101519'
 
 config_file = os.path.join(
     os.path.dirname(os.path.realpath(__file__)),

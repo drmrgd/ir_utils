@@ -16,16 +16,16 @@ the server, which can be generated using the associated config_gen.py script.
 import sys
 import os
 import io
-import re
 import argparse
 import json
 import requests
 import zipfile
 import datetime
 import progressbar
+import urllib3
 
-from termcolor import colored,cprint
-from pprint import pprint as pp
+from termcolor import cprint
+from pprint import pprint as pp  # noqa
 
 version = '6.1.012619' 
 config_file = os.path.dirname(
@@ -203,9 +203,9 @@ def make_bam_datalink(na_type, run_summary, session, header):
     try:
         ir_sample_name = run_summary['samples'][na_type]
     except KeyError:
-        sys.stderr.write("ERROR: No {} sample information for for run: {}! "
-            "Was there an RNA run with this set?\n".format(
-                na_type, run_summary['name'])
+        sys.stderr.write(
+            f"ERROR: No {na_type} sample information for for run: "
+            f"{run_summary['name']}! Was there an {na_type} run with this set?\n"
         )
         return None
 
@@ -227,7 +227,8 @@ def make_bam_datalink(na_type, run_summary, session, header):
         return api_path
 
 def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
-    requests.packages.urllib3.disable_warnings()
+    #  requests.packages.urllib3.disable_warnings()
+    urllib3.disable_warnings()
     s = requests.Session()
 
     # If we want to get RNA files, we need to get the officially entered RNA 
@@ -236,6 +237,7 @@ def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
         url = url.replace('getvcf', 'analysis')
 
     request = s.get(url, headers=header, params=query, verify=False)
+
     try:
         request.raise_for_status()
     except requests.exceptions.HTTPError as error:
@@ -250,7 +252,8 @@ def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
         return None
 
     json_data = request.json()
-    datatype = 'VCF data'
+    # TODO: remove me
+    # datatype = 'VCF data'
 
     if batch_type == 'range':
         sys.stdout.write('Done!\n')
@@ -258,15 +261,19 @@ def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
         sys.stdout.flush()
         return [x['name'] for x in json_data]
 
+    #  pp(json_data)
+    #  sys.exit()
     for analysis_set in json_data:
         if get_rna:
             data_link = make_bam_datalink('RNA', analysis_set, s, header)
-            datatype = 'RNA BAM file'
+            # TODO: remove me.
+            #datatype = 'RNA BAM file'
             if not data_link:
                 return None
         elif get_dna:
             data_link = make_bam_datalink('DNA', analysis_set, s, header)
-            datatype = 'DNA BAM file'
+            # TODO: remove me
+            #datatype = 'DNA BAM file'
             if not data_link:
                 return None
         else:
@@ -353,12 +360,13 @@ def main():
         sys.exit(1)
 
     header = {
-        'Authorization':api_token,
-        'content-type':'application/x-www-form-urlencoded'
+        'Authorization' : api_token,
+        'Content-Type'  : 'application/x-www-form-urlencoded',
     }
     method=cli_args.method
     url = server_url + method
-    #print('::DEBUG:: formated base url: {}'.format(url))
+    #  print('::DEBUG:: formated base url: {}'.format(url))
+    #  sys.exit()
 
     if cli_args.date_range:
         # Allow for one to just put one date to look for data on that date alone
@@ -385,6 +393,7 @@ def main():
         server, len(analysis_ids)))
     sys.stdout.flush()
     count = 0
+
     for expt in analysis_ids:
         count += 1
         sys.stdout.write('[{}/{}]  Retrieving {} for analysis ID: {}...\n'.format(
