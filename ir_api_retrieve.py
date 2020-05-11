@@ -321,7 +321,8 @@ def prog_bar2(response, size, fh):
             " (", progressbar.FileTransferSpeed(), ", ", progressbar.ETA(), " )",
         ]
         size = int(size)
-        pbar = progressbar.ProgressBar(widgets=widgets, maxval=size, term_width=100).start()
+        pbar = progressbar.ProgressBar(widgets=widgets, maxval=size,
+                term_width=80).start()
 
     for buf in response.iter_content(1024):
         if buf:
