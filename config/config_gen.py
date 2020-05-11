@@ -1,7 +1,15 @@
-#!/usr/bin/python
-# Write a config script for package setup to create new config files for IR utils.  We'll need
-# to set up individual users' IP addresses, API Tokens, workflows, etc.  
-###############################################################################################
+#!/usr/bin/env python3
+# Write a config script for package setup to create new config files for IR 
+# utils.  We'll need to set up individual users' IP addresses, API Tokens, 
+# workflows, etc.  
+################################################################################
+"""
+Configuration file generation utility for ir_utils.  Needed to make a IR API 
+Retrieve and IR CLI Sample Creator config files with credential and server 
+information.  Can be used to generate a new, fresh config file, or to update an
+existing config file.  Return will be a new config file for the IR Utils 
+package, along with a backup of the last config file if one existed.
+"""
 import sys
 import os
 import json
@@ -9,10 +17,10 @@ import argparse
 import shutil
 import datetime
 from collections import defaultdict
-from termcolor import colored,cprint
+from termcolor import cprint
 from pprint import pprint as pp
 
-version = '1.8.0_051817'
+version = '2.0.051120'
 debug = False
 
 class Config(object):
@@ -37,7 +45,8 @@ class Config(object):
         '''Automatically increment the version string'''
         v,d = self.config_data['version'].split('.')
         today = str(datetime.datetime.now().strftime('%m%d%y'))
-        return self.config_data.update({'version' : '{}.{}'.format(str(int(v)+1),today)})
+        return self.config_data.update(
+                {'version' : '{}.{}'.format(str(int(v)+1),today)})
 
     def rm_workflow(self,data,key):
         '''TODO:
@@ -52,26 +61,36 @@ class Config(object):
         return
 
     def add_workflow(self,data):
-        '''Add workflow shortname and IR matching name to config file.  Requires a dict of workflow data in the form:
-                {<single|paired> : {<short_name> : <ir_name>}}
-           Since we're using a dict.update() method, can also use same function for updating the 
-           config file.
+        '''
+        Add workflow shortname and IR matching name to config file.  Requires
+        a dict of workflow data in the form:
+
+            {<single|paired> : {<short_name> : <ir_name>}}
+
+        Since we're using a dict.update() method, can also use same function 
+        for updating the config file.
         '''
         for k in data:
             self.config_data['workflows'][k].update(data[k])
         return self.config_data
 
     def add_host(self,data):
-        '''Add host, ip, and token to config file.  Requires a dict of host data in the form:
-                {<hostname> : { 'ip' : <ip_address>, 'token' : <api_token>}}
-           Since we're using a dict.update() method, can also use same function for updating the 
-           config file.
+        '''
+        Add host, ip, and token to config file.  Requires a dict of host data 
+        in the form:
+
+            {<hostname> : { 'ip' : <ip_address>, 'token' : <api_token>}}
+
+        Since we're using a dict.update() method, can also use same function
+        for updating the config file.
         '''
         return self.config_data['hosts'].update(data)
 
     def write_config(self,filename=None):
-        '''Write the config file out to disk. Have left room for custom naming, though this is not
-        preferred as the utils are specifically looking for a certain filename.
+        '''
+        Write the config file out to disk. Have left room for custom naming, 
+        though this is not preferred as the utils are specifically looking for
+        a certain filename.
         '''
         if filename:
             json_out = filename
@@ -81,8 +100,9 @@ class Config(object):
             json.dump(self.config_data,out_fh,indent=4,sort_keys=True)
 
     def __make_blank_template(self,method):
-        '''Make a brand new shiny template file to use for something else. Not yet needed, but can
-        add later.
+        '''
+        Make a brand new shiny template file to use for something else. Not yet 
+        needed, but can add later.
         '''
         return
     
@@ -94,41 +114,59 @@ class Config(object):
 
 
 def get_args():
-    parser = argparse.ArgumentParser(
-        formatter_class = lambda prog: argparse.HelpFormatter(prog, width=125),
-        description='''
-        Configuration file generation utility for ir_utils.  Needed to make a IR API Retrieve and IR CLI Sample Creator
-        config files with credential and server information.  Can be used to generate a new, fresh config file, or to
-        update an existing config file.  Return will be a new config file for the IR Utils package, along with a backup
-        of the last config file if one existed.
-        '''
+    parser = argparse.ArgumentParser(description=__doc__) 
+    parser.add_argument(
+        '-m', '--method', 
+        choices=('api','sample'), 
+        required=True,
+        help='Type of config file to be made or updated.'
     )
-    parser.add_argument('-m', '--method', choices=('api','sample'), required=True,
-            help='Type of config file to be made or updated.')
-    parser.add_argument('-u', '--update', action='store_true',
-            help='Update a config file with new data. Must use either the "server" and "token" options for an '
-                 'API config, or the "workflow" and "analysis_type" options for a sample uploader config')
-    
-    parser.add_argument('-s', '--server', metavar='<hostname:IP_address>', 
-            help='Hostname and IP address, delimited by a colon, for new server to add to the api_retrieve config.')
-    parser.add_argument('-t', '--token', metavar='<api_token>', 
-            help='API Token used for IR API Retrieve. This can be determined from a user account on the IR server '
-                 'to be added..')
-
-    parser.add_argument('-w', '--workflow', metavar='short_name:IR_workflow_name', 
-            help='Short name and IR workflow name (quote names with spaces in them), delimited by a colon, to be '
-                 'added to the sample_creator config file. The full workflow name must match exactly the name that '
-                 'is indicated in the IR GUI.')
-    parser.add_argument('-a', '--analysis_type', choices=('single','paired'),
-            help='Indicate if the workflow is for a paired DNA / RNA or a single RNA / single DNA specimen.')
-
-    parser.add_argument('-f', '--file', metavar='<file>', 
-            help='Read config data from a flat CSV file rather than inputting each element on the commandline. '
-                 'Each line of the file should be formatted similarly to the way data would normally be entered '
-                 '(e.g short_name:IR_name,single or host:ip,token). This method will be helpful for instances '
-                 'where we need to add a lot of stuff to one config.')
-
-    parser.add_argument('--version', action='version', version = '%(prog)s ' + version)
+    parser.add_argument(
+        '-u', '--update', 
+        action='store_true',
+        help='Update a config file with new data. Must use either the "server" '
+            'and "token" options for an API config, or the "workflow" and '
+            '"analysis_type" options for a sample uploader config'
+    )
+    parser.add_argument(
+        '-s', '--server', 
+        metavar='<hostname:IP_address>', 
+        help='Hostname and IP address, delimited by a colon, for new server to '
+            'add to the api_retrieve config.'
+    )
+    parser.add_argument(
+        '-t', '--token', 
+        metavar='<api_token>', 
+        help='API Token used for IR API Retrieve. This can be determined from '
+            'a user account on the IR server to be added.'
+    )
+    parser.add_argument(
+        '-w', '--workflow', 
+        metavar='short_name:IR_workflow_name', 
+        help='Short name and IR workflow name (quote names with spaces in '
+            'them), delimited by a colon, to be added to the sample_creator '
+            'config file. The full workflow name must match exactly the name '
+            'that is indicated in the IR GUI.'
+    )
+    parser.add_argument(
+        '-a', '--analysis_type', 
+        choices=('single','paired'),
+        help='Indicate if the workflow is for a paired DNA / RNA or a single '
+            'RNA / single DNA specimen.')
+    parser.add_argument(
+        '-f', '--file', 
+        metavar='<file>', 
+        help='Read config data from a flat CSV file rather than inputting each '
+            'element on the commandline. Each line of the file should be '
+            'formatted similarly to the way data would normally be entered '
+            '(e.g short_name:IR_name,single or host:ip,token). This method will '
+            'be helpful for instances where we need to add a lot of stuff to '
+            'one config.')
+    parser.add_argument(
+        '--version', 
+        action='version', 
+        version = '%(prog)s ' + version
+    )
     args = parser.parse_args()
 
     new_data = defaultdict(dict)
@@ -141,8 +179,9 @@ def get_args():
     else:
         if args.method == 'sample':
             if not all((args.workflow,args.analysis_type)):
-                write_msg('err','Missing data! You must indicate the workflow name and if the new workflow is a '
-                          '"paired" or "single" workflow when using the "sample" method!\n\n')
+                write_msg('err', 'Missing data! You must indicate the workflow '
+                    'name and if the new workflow is a "paired" or "single" '
+                    'workflow when using the "sample" method!\n\n')
                 parser.print_help()
                 sys.exit(1)
             else:
@@ -150,8 +189,8 @@ def get_args():
                 new_data[args.analysis_type][short_name] = workflow
         elif args.method == 'api':
             if not all((args.server,args.token)):
-                write_msg('err','Missing data! You must indicate the server name and input an API token when using '
-                          'the API method.\n\n')
+                write_msg('err', 'Missing data! You must indicate the server '
+                    'name and input an API token when using the API method.\n\n')
                 parser.print_help()
                 sys.exit(1)
             else:
@@ -162,7 +201,8 @@ def get_args():
                     'token' : args.token
                 }
 
-    # Choose which template we're working with and check to be sure it's the right one
+    # Choose which template we're working with and check to be sure it's the 
+    # right one
     if args.update:
         if args.method == 'api':
             json_template = 'ir_api_retrieve_config.json'
@@ -180,18 +220,15 @@ def validate_file(flatfile,method):
         for line_num, line in enumerate(fh):
             terminal_string = line.rstrip('\n').split(',')[1]
             if method == 'sample' and terminal_string not in ('single','paired'):
-                sys.stderr.write(
-                    'ERROR: Invalid string "{}" in following line of input file (expected only "single" '
-                    'or "paired"):\n'.format(terminal_string)
-                )
-                sys.stderr.write('{}: {}\n'.format(line_num,line))
+                sys.stderr.write(f'ERROR: Invalid string "{terminal_string}" '
+                    'in following line of input file (expected only "single" '
+                    'or "paired"):\n')
+                sys.stderr.write(f'{line_num}: {line}\n')
                 sys.exit(1)
             elif method == 'api' and terminal_string in ('single', 'paired'):
-                sys.stderr.write(
-                    'ERROR: Invalid string "{}" in following line of input file (expected an API token'
-                    ').\n'.format(terminal_string)
-                )
-                sys.stderr.write('{}: {}\n'.format(line_num,line))
+                sys.stderr.write(f'ERROR: Invalid string "{terminal_string}" '
+                    'in following line of input file (expected an API token).\n')
+                sys.stderr.write(f'{line_num}: {line}\n')
                 sys.exit(1)
 
 def read_flat_file(f,method):
@@ -234,7 +271,9 @@ def main():
     method,source_json_file,new_data,update = get_args()
     if debug:
         print('{}  DEBUG  {}'.format('-'*30, '-'*30))
-        print('method: {}\nsource_json_file: {}\nupdate: {}'.format(method, source_json_file, update))
+
+        print(f'method: {method}\nsource_json_file: {source_json_file}\n'
+                'update: {update}')
         pp(dict(new_data))
         print('-'*69)
 
@@ -244,7 +283,8 @@ def main():
         backup_config(source_json_file)
         edit_config(source_json_file,method,new_data)
     else: 
-        new_json = os.path.join(os.getcwd(),os.path.basename(source_json_file).replace('tmplt','json'))
+        new_json = os.path.join(os.getcwd(),
+                os.path.basename(source_json_file).replace('tmplt','json'))
         print('Making a new JSON file: {}'.format(new_json))
         if os.path.exists(new_json):
             backup_config(new_json)
