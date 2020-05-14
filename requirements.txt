@@ -1,0 +1,4 @@
+progressbar2
+termcolor
+requests
+urllib3
