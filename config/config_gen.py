@@ -180,9 +180,8 @@ def get_args():
         if args.method == 'sample':
             if not all((args.workflow,args.analysis_type)):
                 write_msg('err', 'Missing data! You must indicate the workflow '
-                    'name and if the new workflow is a "paired" or "single" '
-                    'workflow when using the "sample" method!\n\n')
-                parser.print_help()
+                    'name and if the new workflow\nis a "paired" or "single" '
+                    'workflow when using the "sample" method!\n')
                 sys.exit(1)
             else:
                 short_name,workflow = args.workflow.split(':')
@@ -190,8 +189,7 @@ def get_args():
         elif args.method == 'api':
             if not all((args.server,args.token)):
                 write_msg('err', 'Missing data! You must indicate the server '
-                    'name and input an API token when using the API method.\n\n')
-                parser.print_help()
+                    'name and input an API token\nwhen using the API method.\n')
                 sys.exit(1)
             else:
                 host,ip = args.server.split(':')
@@ -247,12 +245,13 @@ def read_flat_file(f,method):
 
 def write_msg(flag, string):
     if flag == 'err':
-        cprint("ERROR: ", 'red', attrs=['bold'], end='', file=sys.stderr)
+        cprint("\nERROR: ", 'red', attrs=['bold'], end='', file=sys.stderr)
     elif flag == 'warn':
-        cprint('WARN: ', 'yellow', attrs=['bold'], end='', file=sys.stderr)
+        cprint('\nWARN: ', 'yellow', attrs=['bold'], end='', file=sys.stderr)
     elif flag == 'info':
-        cprint('INFO: ', 'cyan', attrs=['bold'], end='', file=sys.stderr)
-    print(string)
+        cprint('\nINFO: ', 'cyan', attrs=['bold'], end='', file=sys.stderr)
+    sys.stderr.write(string)
+    sys.stderr.flush()
     return
 
 def edit_config(json_file,config_type,new_data):

@@ -35,7 +35,7 @@ from collections import defaultdict
 from termcolor import cprint
 from pprint import pprint as pp  # noqa
 
-version = '4.1.101519'
+version = '4.2.051420'
 
 config_file = os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
@@ -103,8 +103,10 @@ class Config(object):
         for atype in sorted(self.workflow_data):
             sys.stdout.write('%s:\n' % atype)
             for short_name in self.workflow_data[atype]:
-                sys.stdout.write("\t{:12}{}\n".format(short_name, 
-                    self.workflow_data[atype][short_name]))
+                long_name = self.workflow_data[atype][short_name]
+                if len(long_name) > 57:
+                    long_name = long_name[0:57] + '...'
+                sys.stdout.write("\t{:18}{}\n".format(short_name, long_name))
 
     def read_config(self, config_file):
         try:
