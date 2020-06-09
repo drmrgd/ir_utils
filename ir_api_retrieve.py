@@ -27,7 +27,7 @@ import urllib3
 from termcolor import cprint
 from pprint import pprint as pp  # noqa
 
-version = '6.1.012619' 
+version = '6.2.060920' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
 
@@ -107,7 +107,7 @@ def get_args():
             'retrieve a DNA BAM file.  Getting directly from TS is preferred!'
     )
     parser.add_argument(
-        '--date_range', 
+        '--date-range', 
         metavar='<YYYY-MM-dd,YYYY-MM-dd>', 
         help='Range of dates in the format of "start,end" where each date is in '
         'the format YYYY-MM-dd. This will be the range which will be used to '
@@ -144,7 +144,7 @@ def __validate_date(date):
         datetime.datetime.strptime(date, '%Y-%M-%d')
     except ValueError:
         sys.stderr.write("ERROR: the date '%s' is not in a valid format. "
-            "You must use YYYY-MM-dd.\n")
+            "You must use YYYY-MM-dd.\n" % date)
         sys.exit(1)
 
 def get_host(hostname, hostdata=None):
