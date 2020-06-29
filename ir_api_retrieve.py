@@ -27,9 +27,10 @@ import urllib3
 from termcolor import cprint
 from pprint import pprint as pp  # noqa
 
-version = '6.2.060920' 
+version = '6.3.062920' 
 config_file = os.path.dirname(
         os.path.realpath(__file__)) + '/config/ir_api_retrieve_config.json'
+quiet = False
 
 
 class Config(object):
@@ -116,6 +117,11 @@ def get_args():
         'to be checked for inclusion, as well, as the fact that anything within '
         'the range will be downloaded. So, choose this method only if it is '
         'faster than just simply copy / pasting a discrete list of IDs you want!'
+    )
+    parser.add_argument(
+        '-q', '--quiet',
+        action='store_true',
+        help='Suppress most output messages to run quietly.'
     )
     parser.add_argument(
         '-v', '--version', 
@@ -227,7 +233,8 @@ def make_bam_datalink(na_type, run_summary, session, header):
         return api_path
 
 def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
-    #  requests.packages.urllib3.disable_warnings()
+    global quiet 
+
     urllib3.disable_warnings()
     s = requests.Session()
 
@@ -252,28 +259,21 @@ def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
         return None
 
     json_data = request.json()
-    # TODO: remove me
-    # datatype = 'VCF data'
 
     if batch_type == 'range':
-        sys.stdout.write('Done!\n')
-        sys.stdout.write('Total number to retrieve: %s.\n' % len(json_data))
-        sys.stdout.flush()
+        if quiet is False:
+            sys.stdout.write('Done!\n')
+            sys.stdout.write('Total number to retrieve: %s.\n' % len(json_data))
+            sys.stdout.flush()
         return [x['name'] for x in json_data]
 
-    #  pp(json_data)
-    #  sys.exit()
     for analysis_set in json_data:
         if get_rna:
             data_link = make_bam_datalink('RNA', analysis_set, s, header)
-            # TODO: remove me.
-            #datatype = 'RNA BAM file'
             if not data_link:
                 return None
         elif get_dna:
             data_link = make_bam_datalink('DNA', analysis_set, s, header)
-            # TODO: remove me
-            #datatype = 'DNA BAM file'
             if not data_link:
                 return None
         else:
@@ -285,8 +285,10 @@ def api_call(url, query, header, batch_type, get_rna, get_dna, name=None):
                 stream=True)
             
             total_size = response.headers.get('content-length', None)
-            prog_bar2(response, total_size, zip_fh)
-    sys.stderr.write('Done!\n\n')
+            if quiet is False:
+                prog_bar2(response, total_size, zip_fh)
+    if quiet is False:
+        sys.stderr.write('Done!\n\n')
 
 def prog_bar2(response, size, fh):
     """
@@ -340,6 +342,12 @@ def main():
     else:
         datatype = 'VCF data'
     
+    global quiet
+    quiet = cli_args.quiet
+    if quiet is True:
+        sys.stdout.write("Running in silent mode.\n")
+        sys.stdout.flush()
+
     server = cli_args.Host if cli_args.Host else cli_args.ip
 
     if cli_args.ip and cli_args.token:
@@ -377,9 +385,10 @@ def main():
         __validate_date(start)
         __validate_date(end)
 
-        sys.stdout.write('Getting list of results from IR {} for dates from {} '
-            'to {}...'.format(server, start, end))
-        sys.stdout.flush()
+        if quiet is False:
+            sys.stdout.write('Getting list of results from IR {} for dates from {} '
+                'to {}...'.format(server, start, end))
+            sys.stdout.flush()
         query = {
             'format' : 'json', 
             'start_date' : start, 
@@ -390,23 +399,29 @@ def main():
         analysis_ids = api_call(url, query, header, 'range', cli_args.rna, 
             cli_args.dna)
     
-    sys.stdout.write('Getting data from IR {} (total runs: {}).\n\n'.format(
-        server, len(analysis_ids)))
-    sys.stdout.flush()
+    if quiet is False:
+        sys.stdout.write('Getting data from IR {} (total runs: {}).\n\n'.format(
+            server, len(analysis_ids)))
+        sys.stdout.flush()
     count = 0
 
     for expt in analysis_ids:
         count += 1
-        sys.stdout.write('[{}/{}]  Retrieving {} for analysis ID: {}...\n'.format(
-            count, len(analysis_ids), datatype, expt)
-        )
-        sys.stdout.flush()
+        if quiet is False:
+            sys.stdout.write('[{}/{}]  Retrieving {} for analysis ID: {}...\n'.format(
+                count, len(analysis_ids), datatype, expt)
+            )
+            sys.stdout.flush()
         query = {
             'format'  : 'json', 
             'name'    : expt, 
             'exclude' : 'filteredvariants'
         }
         api_call(url, query, header, 'single', cli_args.rna, cli_args.dna, expt)
+
+        if quiet is True:
+            sys.stdout.write("Finished downloading IR data.\n")
+            sys.stdout.flush()
 
 if __name__ == '__main__':
     try:
